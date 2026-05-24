@@ -15,3 +15,6 @@ Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
 use App\Http\Controllers\Api\AuthController;
 
 Route::post('/login/parent', [AuthController::class, 'loginParent']);
+
+use App\Http\Controllers\Api\ParentController;
+Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
