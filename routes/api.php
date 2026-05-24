@@ -45,3 +45,4 @@ Route::post('/matieres', [MatiereController::class, 'store']);
 Route::get('/enseignants', [EnseignantController::class, 'index']);
 Route::post('/enseignants', [EnseignantController::class, 'store']);
 
+
