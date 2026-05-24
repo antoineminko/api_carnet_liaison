@@ -10,9 +10,15 @@ class ClasseController extends Controller
 {
     public function index()
     {
-        // Supposons que la table classes existe
         try {
-            $classes = DB::table('classes')->get();
+            $classes = DB::table('classes')
+                ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->select(
+                    'classes.*',
+                    'ecoles.nom as ecole_nom',
+                    'ecoles.code as ecole_code'
+                )
+                ->get();
             return response()->json($classes);
         } catch (\Exception $e) {
             return response()->json([]);
@@ -23,13 +29,19 @@ class ClasseController extends Controller
     {
         try {
             $id = DB::table('classes')->insertGetId([
-                'nom' => $request->input('nom', 'Nouvelle Classe'),
-                'ecole_id' => $request->input('ecole_id', 1),
-                'enseignant_id' => $request->input('enseignant_id', null),
+                'nom'      => $request->input('nom'),
+                'code'     => $request->input('code'),
+                'ecole_id' => $request->input('ecole_id'),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $classe = DB::table('classes')->where('id', $id)->first();
+
+            $classe = DB::table('classes')
+                ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->select('classes.*', 'ecoles.nom as ecole_nom')
+                ->where('classes.id', $id)
+                ->first();
+
             return response()->json($classe, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
