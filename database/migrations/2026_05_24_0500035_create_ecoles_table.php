@@ -8,19 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('classes', function (Blueprint $table) {
+        Schema::create('ecoles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('ecole_id')->constrained('ecoles')->onDelete('cascade');
             $table->string('nom');
-            $table->string('code_classe'); // e.g., TLC
-            $table->string('niveau')->nullable();
+            $table->string('code_ecole')->unique(); // e.g., NDQ
             $table->string('annee_scolaire')->nullable();
+            $table->string('logo')->nullable();
             $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('classes');
+        Schema::dropIfExists('ecoles');
     }
 };

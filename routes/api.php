@@ -18,3 +18,16 @@ Route::post('/login/parent', [AuthController::class, 'loginParent']);
 
 use App\Http\Controllers\Api\ParentController;
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
+
+use App\Http\Controllers\Api\EcoleController;
+use App\Http\Controllers\Api\ClasseController;
+use App\Http\Controllers\Api\EleveController;
+
+Route::get('/ecoles', [EcoleController::class, 'index']);
+Route::post('/ecoles', [EcoleController::class, 'store']);
+
+Route::get('/classes', [ClasseController::class, 'index']);
+Route::post('/classes', [ClasseController::class, 'store']);
+
+Route::get('/eleves', [EleveController::class, 'index']);
+Route::post('/eleves', [EleveController::class, 'store']);

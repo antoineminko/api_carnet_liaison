@@ -2,14 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Classe extends Model
 {
-    use HasFactory;
+    protected $fillable = [
+        'ecole_id',
+        'nom',
+        'code_classe',
+        'niveau',
+        'annee_scolaire',
+    ];
 
-    protected $guarded = [];
+    public function ecole()
+    {
+        return $this->belongsTo(Ecole::class);
+    }
 
     public function eleves()
     {
