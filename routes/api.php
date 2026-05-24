@@ -31,3 +31,17 @@ Route::post('/classes', [ClasseController::class, 'store']);
 
 Route::get('/eleves', [EleveController::class, 'index']);
 Route::post('/eleves', [EleveController::class, 'store']);
+
+use App\Http\Controllers\Api\ParentController;
+use App\Http\Controllers\Api\MatiereController;
+use App\Http\Controllers\Api\EnseignantController;
+
+Route::get('/parents', [ParentController::class, 'index']);
+Route::post('/parents', [ParentController::class, 'store']);
+
+Route::get('/matieres', [MatiereController::class, 'index']);
+Route::post('/matieres', [MatiereController::class, 'store']);
+
+Route::get('/enseignants', [EnseignantController::class, 'index']);
+Route::post('/enseignants', [EnseignantController::class, 'store']);
+

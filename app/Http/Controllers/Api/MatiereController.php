@@ -6,14 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class ClasseController extends Controller
+class MatiereController extends Controller
 {
     public function index()
     {
-        // Supposons que la table classes existe
         try {
-            $classes = DB::table('classes')->get();
-            return response()->json($classes);
+            $matieres = DB::table('matieres')->get();
+            return response()->json($matieres);
         } catch (\Exception $e) {
             return response()->json([]);
         }
@@ -22,15 +21,14 @@ class ClasseController extends Controller
     public function store(Request $request)
     {
         try {
-            $id = DB::table('classes')->insertGetId([
-                'nom' => $request->input('nom', 'Nouvelle Classe'),
-                'ecole_id' => $request->input('ecole_id', 1),
-                'enseignant_id' => $request->input('enseignant_id', null),
+            $id = DB::table('matieres')->insertGetId([
+                'nom' => $request->input('nom', 'Nouvelle Matiere'),
+                'coefficient' => $request->input('coefficient', 1),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $classe = DB::table('classes')->where('id', $id)->first();
-            return response()->json($classe, 201);
+            $matiere = DB::table('matieres')->where('id', $id)->first();
+            return response()->json($matiere, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

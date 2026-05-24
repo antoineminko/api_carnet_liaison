@@ -4,53 +4,48 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\ParentUser;
-use App\Models\Eleve;
 use Illuminate\Support\Facades\DB;
 
 class ParentController extends Controller
 {
-    public function getChildren($parentId)
+    public function index()
     {
-        $parent = ParentUser::find($parentId);
-        
-        if (!$parent) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Parent introuvable'
-            ], 404);
+        try {
+            $parents = DB::table('parent_users')->get();
+            return response()->json($parents);
+        } catch (\Exception $e) {
+            return response()->json([]);
         }
+    }
 
-        // Récupérer les élèves liés au parent avec leurs classes
-        $eleves = DB::table('eleves')
-            ->join('eleve_parents', 'eleves.id', '=', 'eleve_parents.eleve_id')
-            ->join('classes', 'eleves.classe_id', '=', 'classes.id')
-            ->where('eleve_parents.parent_id', $parentId)
-            ->select(
-                'eleves.id',
-                'eleves.nom',
-                'eleves.prenom',
-                'eleves.matricule',
-                'classes.nom as classe_nom'
-            )
-            ->get();
+    public function store(Request $request)
+    {
+        try {
+            $id = DB::table('parent_users')->insertGetId([
+                'nom' => $request->input('nom', 'N/A'),
+                'prenom' => $request->input('prenom', 'N/A'),
+                'email' => $request->input('email', null),
+                'telephone' => $request->input('telephone', null),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $parent = DB::table('parent_users')->where('id', $id)->first();
+            return response()->json($parent, 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 
-        // Format data for the mobile app
-        $childrenData = $eleves->map(function ($eleve) {
-            return [
-                'id' => $eleve->id,
-                'name' => $eleve->prenom . ' ' . $eleve->nom,
-                'grade' => $eleve->classe_nom,
-                'school' => 'Skooly School', // Mocker pour l'instant si on ne gère pas la table école
-                'image' => 'assets/images/profil/eleve1.jpg',
-                'notif' => 0,
-                'color' => 0xFF2596be // int color format used by Flutter (blue)
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'children' => $childrenData
-        ]);
+    public function getChildren($id)
+    {
+        try {
+            $eleves = DB::table('eleves')
+                ->join('eleve_parents', 'eleves.id', '=', 'eleve_parents.eleve_id')
+                ->where('eleve_parents.parent_id', $id)
+                ->get();
+            return response()->json($eleves);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
     }
 }

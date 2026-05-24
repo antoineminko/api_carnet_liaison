@@ -6,13 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class EleveController extends Controller
+class EnseignantController extends Controller
 {
     public function index()
     {
         try {
-            $eleves = DB::table('eleves')->get();
-            return response()->json($eleves);
+            $enseignants = DB::table('enseignants')->get();
+            return response()->json($enseignants);
         } catch (\Exception $e) {
             return response()->json([]);
         }
@@ -21,17 +21,16 @@ class EleveController extends Controller
     public function store(Request $request)
     {
         try {
-            $id = DB::table('eleves')->insertGetId([
+            $id = DB::table('enseignants')->insertGetId([
                 'nom' => $request->input('nom', 'N/A'),
                 'prenom' => $request->input('prenom', 'N/A'),
-                'matricule' => $request->input('matricule', uniqid('MAT-')),
-                'classe_id' => $request->input('classe_id', 1),
-                'code_secret' => $request->input('code_secret', uniqid('SEC-')),
+                'email' => $request->input('email', null),
+                'telephone' => $request->input('telephone', null),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $eleve = DB::table('eleves')->where('id', $id)->first();
-            return response()->json($eleve, 201);
+            $enseignant = DB::table('enseignants')->where('id', $id)->first();
+            return response()->json($enseignant, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
