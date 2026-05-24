@@ -13,6 +13,9 @@ return new class extends Migration
             $table->string('nom');
             $table->string('code', 10)->unique();
             $table->string('annee_scolaire')->default('2025-2026');
+            $table->integer('nb_classes')->default(0);
+            $table->integer('nb_profs')->default(0);
+            $table->integer('nb_eleves')->default(0);
             $table->timestamps();
         });
     }

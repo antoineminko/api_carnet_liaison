@@ -25,6 +25,9 @@ class EcoleController extends Controller
                 'nom'            => $request->input('nom', 'École'),
                 'code'           => $request->input('code', 'ECO'),
                 'annee_scolaire' => $request->input('annee_scolaire', date('Y') . '-' . (date('Y') + 1)),
+                'nb_classes'     => $request->input('nb_classes', 0),
+                'nb_profs'       => $request->input('nb_profs', 0),
+                'nb_eleves'      => $request->input('nb_eleves', 0),
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ]);
