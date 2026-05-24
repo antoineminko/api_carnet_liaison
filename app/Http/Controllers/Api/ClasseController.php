@@ -13,10 +13,12 @@ class ClasseController extends Controller
         try {
             $classes = DB::table('classes')
                 ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->leftJoin('enseignants', 'classes.prof_principal_id', '=', 'enseignants.id')
                 ->select(
                     'classes.*',
                     'ecoles.nom as ecole_nom',
-                    'ecoles.code as ecole_code'
+                    'ecoles.code as ecole_code',
+                    DB::raw("CONCAT(enseignants.prenom, ' ', enseignants.nom) as prof_principal_nom")
                 )
                 ->get();
             return response()->json($classes);

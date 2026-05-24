@@ -24,11 +24,20 @@ class EnseignantController extends Controller
             $id = DB::table('enseignants')->insertGetId([
                 'nom' => $request->input('nom', 'N/A'),
                 'prenom' => $request->input('prenom', 'N/A'),
+                'matiere' => $request->input('matiere', null),
                 'email' => $request->input('email', null),
                 'telephone' => $request->input('telephone', null),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Assignation comme prof principal si demandé
+            if ($request->input('est_prof_principal') && $request->input('classe_principale_id')) {
+                DB::table('classes')
+                    ->where('id', $request->input('classe_principale_id'))
+                    ->update(['prof_principal_id' => $id]);
+            }
+
             $enseignant = DB::table('enseignants')->where('id', $id)->first();
             return response()->json($enseignant, 201);
         } catch (\Exception $e) {
