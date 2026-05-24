@@ -2,16 +2,22 @@
 
 namespace Database\Seeders;
 
-use App\Models\Classe;
-use App\Models\Eleve;
-use App\Models\ParentUser;
+use App\Models\User;
+// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
+    /**
+     * Seed the application's database.
+     */
     public function run(): void
     {
-        // Le seeder est vide. Les données seront insérées depuis l'interface web.
+        // User::factory(10)->create();
+
+        User::factory()->create([
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+        ]);
     }
 }
