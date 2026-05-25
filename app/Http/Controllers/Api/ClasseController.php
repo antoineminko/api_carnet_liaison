@@ -23,7 +23,7 @@ class ClasseController extends Controller
                 ->get();
             return response()->json($classes);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

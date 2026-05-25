@@ -14,7 +14,7 @@ class EcoleController extends Controller
             $ecoles = DB::table('ecoles')->get();
             return response()->json($ecoles);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

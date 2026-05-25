@@ -14,7 +14,7 @@ class EnseignantController extends Controller
             $enseignants = DB::table('enseignants')->get();
             return response()->json($enseignants);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

@@ -14,7 +14,7 @@ class MatiereController extends Controller
             $matieres = DB::table('matieres')->get();
             return response()->json($matieres);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

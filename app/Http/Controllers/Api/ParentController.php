@@ -14,7 +14,7 @@ class ParentController extends Controller
             $parents = DB::table('parent_users')->get();
             return response()->json($parents);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -45,7 +45,7 @@ class ParentController extends Controller
                 ->get();
             return response()->json($eleves);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 }

@@ -21,7 +21,7 @@ class EleveController extends Controller
                 ->get();
             return response()->json($eleves);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
