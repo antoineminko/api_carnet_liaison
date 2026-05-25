@@ -11,7 +11,14 @@ class ParentController extends Controller
     public function index()
     {
         try {
-            $parents = DB::table('parent_users')->get();
+            $parents = DB::table('parent_users')
+                ->leftJoin('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
+                ->select(
+                    'parent_users.*',
+                    DB::raw('COUNT(eleve_parents.eleve_id) as nb_enfants')
+                )
+                ->groupBy('parent_users.id')
+                ->get();
             return response()->json($parents);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -25,10 +32,23 @@ class ParentController extends Controller
                 'nom' => $request->input('nom', 'N/A'),
                 'prenom' => $request->input('prenom', 'N/A'),
                 'email' => $request->input('email', null),
+                'password' => bcrypt('parent123'),
                 'telephone' => $request->input('telephone', null),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Lier le parent à un élève si eleve_id est fourni
+            if ($request->input('eleve_id')) {
+                DB::table('eleve_parents')->insert([
+                    'eleve_id' => $request->input('eleve_id'),
+                    'parent_id' => $id,
+                    'relation' => 'Parent',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
             $parent = DB::table('parent_users')->where('id', $id)->first();
             return response()->json($parent, 201);
         } catch (\Exception $e) {

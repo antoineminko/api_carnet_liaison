@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class EleveController extends Controller
 {
@@ -38,6 +39,12 @@ class EleveController extends Controller
             // Générer matricule automatique
             $matricule = $request->input('matricule', 'MAT-' . strtoupper(uniqid()));
 
+            // Gérer l'upload de la photo
+            $photoPath = null;
+            if ($request->hasFile('photo')) {
+                $photoPath = $request->file('photo')->store('photos/eleves', 'public');
+            }
+
             $id = DB::table('eleves')->insertGetId([
                 'nom'            => $request->input('nom'),
                 'prenom'         => $request->input('prenom'),
@@ -46,6 +53,7 @@ class EleveController extends Controller
                 'code_secret'    => $request->input('code_secret'),
                 'date_naissance' => $request->input('date_naissance'),
                 'lieu_naissance' => $request->input('lieu_naissance'),
+                'photo'          => $photoPath,
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ]);

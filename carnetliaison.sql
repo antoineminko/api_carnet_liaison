@@ -229,6 +229,7 @@ CREATE TABLE `eleves` (
     `qr_code` TEXT NULL DEFAULT NULL,
     `date_naissance` DATE NULL DEFAULT NULL,
     `lieu_naissance` VARCHAR(255) NULL DEFAULT NULL,
+    `photo` VARCHAR(255) NULL DEFAULT NULL,
     `created_at` TIMESTAMP NULL DEFAULT NULL,
     `updated_at` TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (`id`),

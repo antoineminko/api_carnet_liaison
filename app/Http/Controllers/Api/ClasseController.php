@@ -30,10 +30,32 @@ class ClasseController extends Controller
     public function store(Request $request)
     {
         try {
+            // Auto-générer le code de la classe à partir du nom (ex: "6ème A" → "6EA")
+            $code = $request->input('code');
+            if (!$code) {
+                $nom = $request->input('nom', '');
+                $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $nom));
+                $code = substr($code, 0, 5);
+                // S'assurer de l'unicité
+                $suffix = 1;
+                $baseCode = $code;
+                while (DB::table('classes')->where('code', $code)->exists()) {
+                    $code = $baseCode . $suffix;
+                    $suffix++;
+                }
+            }
+
+            // Si pas d'ecole_id, prendre la première école
+            $ecoleId = $request->input('ecole_id');
+            if (!$ecoleId) {
+                $ecole = DB::table('ecoles')->first();
+                $ecoleId = $ecole ? $ecole->id : null;
+            }
+
             $id = DB::table('classes')->insertGetId([
                 'nom'      => $request->input('nom'),
-                'code'     => $request->input('code'),
-                'ecole_id' => $request->input('ecole_id'),
+                'code'     => $code,
+                'ecole_id' => $ecoleId,
                 'prof_principal_id' => $request->input('prof_principal_id'),
                 'created_at' => now(),
                 'updated_at' => now(),
