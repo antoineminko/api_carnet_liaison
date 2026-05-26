@@ -9,7 +9,13 @@ class ParentUser extends Model
 {
     use HasFactory;
 
-    protected $guarded = [];
+    protected $table = 'parent_users';
+
+    protected $fillable = [
+        'nom', 'prenom', 'email', 'password', 'telephone', 'fcm_token',
+    ];
+
+    protected $hidden = ['password'];
 
     public function enfants()
     {
