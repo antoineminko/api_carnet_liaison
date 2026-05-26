@@ -11,13 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('parents', function (Blueprint $table) {
-            $table->string('fcm_token')->nullable()->after('remember_token');
+        Schema::table('parent_users', function (Blueprint $table) {
+            $table->string('fcm_token')->nullable();
         });
-        
-        Schema::table('enseignants', function (Blueprint $table) {
-            $table->string('fcm_token')->nullable()->after('email');
-        });
+
+        if (Schema::hasTable('enseignants')) {
+            Schema::table('enseignants', function (Blueprint $table) {
+                $table->string('fcm_token')->nullable()->after('email');
+            });
+        }
     }
 
     /**
@@ -25,12 +27,14 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('parents', function (Blueprint $table) {
+        Schema::table('parent_users', function (Blueprint $table) {
             $table->dropColumn('fcm_token');
         });
-        
-        Schema::table('enseignants', function (Blueprint $table) {
-            $table->dropColumn('fcm_token');
-        });
+
+        if (Schema::hasTable('enseignants')) {
+            Schema::table('enseignants', function (Blueprint $table) {
+                $table->dropColumn('fcm_token');
+            });
+        }
     }
 };
