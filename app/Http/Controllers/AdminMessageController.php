@@ -21,15 +21,16 @@ class AdminMessageController extends Controller
         $this->notificationService = $notificationService;
     }
 
-    // 1. Envoyer un message depuis l'Admin (appweb) vers un Parent ou toute une Classe
+    // 1. Envoyer un message depuis l'Admin (appweb) vers un Parent, une Classe ou les parents d'un Élève
     public function sendMessageToParent(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'ecole_id'  => 'required|integer',
             'type'      => 'required|string',
             'content'   => 'required|string',
-            'parent_id' => 'required_without:classe_id|integer|nullable',
-            'classe_id' => 'required_without:parent_id|integer|nullable',
+            'parent_id' => 'nullable|integer',
+            'classe_id' => 'nullable|integer',
+            'eleve_id'  => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
@@ -47,10 +48,21 @@ class AdminMessageController extends Controller
                 ->unique()
                 ->toArray();
         }
-
-        // Cas 2 : Envoi à un parent unique
-        if ($request->filled('parent_id')) {
+        // Cas 2 : Envoi aux parents d'un élève spécifique
+        elseif ($request->filled('eleve_id')) {
+            $parentIds = DB::table('eleve_parents')
+                ->where('eleve_id', $request->eleve_id)
+                ->pluck('parent_id')
+                ->unique()
+                ->toArray();
+        }
+        // Cas 3 : Envoi à un parent unique
+        elseif ($request->filled('parent_id')) {
             $parentIds = [$request->parent_id];
+        }
+
+        if (empty($parentIds)) {
+            return response()->json(['error' => 'Aucun destinataire trouvé.'], 400);
         }
 
         $sentCount = 0;
