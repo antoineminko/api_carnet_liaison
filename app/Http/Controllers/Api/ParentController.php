@@ -28,10 +28,15 @@ class ParentController extends Controller
     public function store(Request $request)
     {
         try {
+            $email = $request->input('email');
+            if (empty($email)) {
+                $email = 'parent_' . time() . '_' . rand(1000, 9999) . '@carnet.local';
+            }
+
             $id = DB::table('parent_users')->insertGetId([
                 'nom' => $request->input('nom', 'N/A'),
                 'prenom' => $request->input('prenom', 'N/A'),
-                'email' => $request->input('email', null),
+                'email' => $email,
                 'password' => bcrypt('parent123'),
                 'telephone' => $request->input('telephone', null),
                 'created_at' => now(),
