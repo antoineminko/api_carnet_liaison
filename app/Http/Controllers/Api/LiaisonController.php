@@ -43,9 +43,10 @@ class LiaisonController extends Controller
 
         if ($exists) {
             return response()->json([
-                'success' => false,
-                'message' => 'Cet enfant est déjà lié à votre compte.'
-            ], 400);
+                'success' => true,
+                'message' => 'Cet enfant est déjà lié à votre compte.',
+                'eleve' => $eleve
+            ]);
         }
 
         DB::table('eleve_parents')->insert([
@@ -64,13 +65,14 @@ class LiaisonController extends Controller
 
     public function linkWithQrCode(Request $request)
     {
-        // QR Code could contain the secret code directly
         $request->validate([
-            'qr_data' => 'required|string',
             'parent_id' => 'required|integer'
         ]);
 
-        $request->merge(['code_secret' => $request->qr_data]);
+        $request->merge([
+            'code_secret' => $request->input('qr_data') ?? $request->input('qr_code')
+        ]);
+
         return $this->linkWithSecretCode($request);
     }
 }

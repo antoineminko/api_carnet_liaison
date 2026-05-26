@@ -11,6 +11,10 @@ use App\Http\Controllers\Api\EleveController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\MatiereController;
 use App\Http\Controllers\Api\EnseignantController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\MessageController;
+use App\Http\Controllers\AdminMessageController;
 
 // Auth
 Route::post('/login/parent', [AuthController::class, 'loginParent']);
@@ -30,11 +34,16 @@ Route::post('/classes', [ClasseController::class, 'store']);
 // Eleves
 Route::get('/eleves', [EleveController::class, 'index']);
 Route::post('/eleves', [EleveController::class, 'store']);
+Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']);
+
+// Appel (Présences)
+Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
 
 // Parents
 Route::get('/parents', [ParentController::class, 'index']);
 Route::post('/parents', [ParentController::class, 'store']);
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
+Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 
 // Matieres
 Route::get('/matieres', [MatiereController::class, 'index']);
@@ -43,6 +52,17 @@ Route::post('/matieres', [MatiereController::class, 'store']);
 // Enseignants
 Route::get('/enseignants', [EnseignantController::class, 'index']);
 Route::post('/enseignants', [EnseignantController::class, 'store']);
+
+// Notifications
+Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);
+
+// Messagerie
+Route::get('/messages/conversation', [MessageController::class, 'getConversation']);
+Route::post('/messages', [MessageController::class, 'sendMessage']);
+
+// Administration Messages
+Route::post('/admin/messages/send', [AdminMessageController::class, 'sendMessageToParent']);
+Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
 
 // Protected routes
 Route::get('/user', function (Request $request) {

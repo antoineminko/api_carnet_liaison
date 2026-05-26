@@ -69,4 +69,15 @@ class EleveController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+    public function getByClasse($classeId)
+    {
+        try {
+            $eleves = DB::table('eleves')
+                ->where('classe_id', $classeId)
+                ->get();
+            return response()->json($eleves);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

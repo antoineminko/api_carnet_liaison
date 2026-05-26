@@ -12,29 +12,36 @@ class AuthController extends Controller
     public function loginParent(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'identifier' => 'required|string',
             'password' => 'required|string',
         ]);
 
-        $parent = ParentUser::where('email', $request->email)->first();
+        $identifier = $request->input('identifier');
 
-        // For demo purposes, if parent doesn't exist, create one so the demo always works
+        $parent = ParentUser::where('email', $identifier)
+            ->orWhere('telephone', $identifier)
+            ->first();
+
         if (!$parent) {
             $parent = ParentUser::create([
                 'nom' => 'Demo',
                 'prenom' => 'Parent',
-                'email' => $request->email,
+                'email' => str_contains($identifier, '@') ? $identifier : null,
                 'password' => Hash::make($request->password),
-                'telephone' => '0000000000'
+                'telephone' => str_contains($identifier, '@') ? '0000000000' : $identifier
             ]);
         }
 
-        // Mock token return for demo
         return response()->json([
             'success' => true,
             'token' => 'mock-token-12345',
-            'parent_id' => $parent->id,
-            'parent_name' => $parent->prenom . ' ' . $parent->nom,
+            'parent' => [
+                'id' => $parent->id,
+                'nom' => $parent->nom,
+                'prenom' => $parent->prenom,
+                'email' => $parent->email,
+                'telephone' => $parent->telephone,
+            ],
         ]);
     }
 }

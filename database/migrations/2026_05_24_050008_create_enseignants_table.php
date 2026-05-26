@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('matiere')->nullable();
             $table->string('email')->nullable();
             $table->string('telephone')->nullable();
+            $table->string('password')->nullable(); // Ajout du password
             $table->foreignId('ecole_id')->nullable()->constrained('ecoles')->nullOnDelete();
             $table->timestamps();
         });

@@ -61,6 +61,16 @@ class ParentController extends Controller
         try {
             $eleves = DB::table('eleves')
                 ->join('eleve_parents', 'eleves.id', '=', 'eleve_parents.eleve_id')
+                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->select(
+                    'eleves.*',
+                    'classes.nom as classe_nom',
+                    'classes.code as classe_code',
+                    'ecoles.nom as ecole_nom',
+                    'ecoles.code as ecole_code',
+                    'eleve_parents.relation'
+                )
                 ->where('eleve_parents.parent_id', $id)
                 ->get();
             return response()->json($eleves);
