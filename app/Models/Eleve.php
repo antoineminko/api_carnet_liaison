@@ -16,7 +16,18 @@ class Eleve extends Model
         'classe_id',
         'code_secret',
         'qr_code',
+        'photo',
     ];
+
+    protected $appends = ['photo_url'];
+
+    public function getPhotoUrlAttribute()
+    {
+        if ($this->photo) {
+            return env('APP_URL') . '/storage/' . $this->photo;
+        }
+        return null;
+    }
 
     public function classe()
     {

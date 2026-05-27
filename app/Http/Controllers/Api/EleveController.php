@@ -20,6 +20,12 @@ class EleveController extends Controller
                     'classes.code as classe_code'
                 )
                 ->get();
+
+            $eleves = $eleves->map(function($eleve) {
+                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+                return $eleve;
+            });
+
             return response()->json($eleves);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -64,6 +70,10 @@ class EleveController extends Controller
                 ->where('eleves.id', $id)
                 ->first();
 
+            if ($eleve) {
+                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+            }
+
             return response()->json($eleve, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -75,6 +85,12 @@ class EleveController extends Controller
             $eleves = DB::table('eleves')
                 ->where('classe_id', $classeId)
                 ->get();
+
+            $eleves = $eleves->map(function($eleve) {
+                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+                return $eleve;
+            });
+
             return response()->json($eleves);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -109,6 +125,11 @@ class EleveController extends Controller
                 ->select('eleves.*', 'classes.nom as classe_nom', 'classes.code as classe_code')
                 ->where('eleves.id', $id)
                 ->first();
+            
+            if ($eleve) {
+                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+            }
+
             return response()->json($eleve);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

@@ -77,6 +77,12 @@ class ParentController extends Controller
                 )
                 ->where('eleve_parents.parent_id', $id)
                 ->get();
+
+            $eleves = $eleves->map(function($eleve) {
+                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+                return $eleve;
+            });
+
             return response()->json($eleves);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
