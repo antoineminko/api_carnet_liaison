@@ -7,10 +7,19 @@ use Illuminate\Http\Request;
 
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\ParentUser;
+use App\Services\PushNotificationService;
 use Illuminate\Support\Facades\Validator;
 
 class MessageController extends Controller
 {
+    protected $notificationService;
+
+    public function __construct(PushNotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     // Récupérer les messages d'une conversation (ou la créer si elle n'existe pas)
     public function getConversation(Request $request)
     {
@@ -54,6 +63,24 @@ class MessageController extends Controller
             'content' => $request->content,
             'is_read' => false
         ]);
+
+        // Envoyer une notification push au parent si l'expéditeur n'est pas le parent lui-même
+        if ($request->sender_type !== 'parent') {
+            $conversation = Conversation::find($request->conversation_id);
+            if ($conversation && $conversation->parent_id) {
+                $parent = ParentUser::find($conversation->parent_id);
+                if ($parent && !empty($parent->fcm_token)) {
+                    $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : "L'école";
+                    $title = "Nouveau message de {$senderName}";
+                    $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
+
+                    $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                        'conversation_id' => (string) $conversation->id,
+                        'type' => 'teacher_message'
+                    ]);
+                }
+            }
+        }
 
         return response()->json($message, 201);
     }

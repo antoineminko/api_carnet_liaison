@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\MatiereController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\DevoirController;
+use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\AdminMessageController;
 
@@ -38,6 +40,14 @@ Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']
 
 // Appel (Présences)
 Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
+
+// Devoirs
+Route::post('/devoirs', [DevoirController::class, 'store']);
+
+// Rendez-vous
+Route::post('/appointments', [AppointmentController::class, 'store']);
+Route::put('/appointments/{id}/status', [AppointmentController::class, 'updateStatus']);
+Route::get('/appointments', [AppointmentController::class, 'index']);
 
 // Parents
 Route::get('/parents', [ParentController::class, 'index']);
