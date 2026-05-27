@@ -12,12 +12,10 @@ class ParentController extends Controller
     {
         try {
             $parents = DB::table('parent_users')
-                ->leftJoin('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
                 ->select(
                     'parent_users.*',
-                    DB::raw('COUNT(eleve_parents.eleve_id) as nb_enfants')
+                    DB::raw('(SELECT COUNT(*) FROM eleve_parents WHERE eleve_parents.parent_id = parent_users.id) as nb_enfants')
                 )
-                ->groupBy('parent_users.id')
                 ->get();
             return response()->json($parents);
         } catch (\Exception $e) {
