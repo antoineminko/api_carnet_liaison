@@ -88,3 +88,6 @@ Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'g
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+use App\Http\Controllers\Api\EleveDashboardController;
+Route::get('/eleves/{id}/dashboard', [EleveDashboardController::class, 'getDashboard']);
