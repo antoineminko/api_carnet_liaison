@@ -77,4 +77,37 @@ class ClasseController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+    public function update(Request $request, $id)
+    {
+        try {
+            DB::table('classes')->where('id', $id)->update([
+                'nom' => $request->input('nom'),
+                'prof_principal_id' => $request->input('prof_principal_id'),
+                'updated_at' => now(),
+            ]);
+            $classe = DB::table('classes')
+                ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->leftJoin('enseignants', 'classes.prof_principal_id', '=', 'enseignants.id')
+                ->select(
+                    'classes.*', 
+                    'ecoles.nom as ecole_nom',
+                    DB::raw("CONCAT(enseignants.prenom, ' ', enseignants.nom) as prof_principal_nom")
+                )
+                ->where('classes.id', $id)
+                ->first();
+            return response()->json($classe);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            DB::table('classes')->where('id', $id)->delete();
+            return response()->json(['message' => 'Deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

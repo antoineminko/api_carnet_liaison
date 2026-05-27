@@ -44,4 +44,35 @@ class EnseignantController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            DB::table('enseignants')->where('id', $id)->update([
+                'nom' => $request->input('nom'),
+                'prenom' => $request->input('prenom'),
+                'matiere' => $request->input('matiere'),
+                'email' => $request->input('email'),
+                'telephone' => $request->input('telephone'),
+                'est_prof_principal' => $request->input('est_prof_principal', false),
+                'classe_principale_id' => $request->input('classe_principale_id'),
+                'updated_at' => now(),
+            ]);
+
+            $enseignant = DB::table('enseignants')->where('id', $id)->first();
+            return response()->json($enseignant);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            DB::table('enseignants')->where('id', $id)->delete();
+            return response()->json(['message' => 'Deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

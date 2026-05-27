@@ -32,10 +32,14 @@ Route::post('/ecoles', [EcoleController::class, 'store']);
 // Classes
 Route::get('/classes', [ClasseController::class, 'index']);
 Route::post('/classes', [ClasseController::class, 'store']);
+Route::put('/classes/{id}', [ClasseController::class, 'update']);
+Route::delete('/classes/{id}', [ClasseController::class, 'destroy']);
 
 // Eleves
 Route::get('/eleves', [EleveController::class, 'index']);
 Route::post('/eleves', [EleveController::class, 'store']);
+Route::put('/eleves/{id}', [EleveController::class, 'update']);
+Route::delete('/eleves/{id}', [EleveController::class, 'destroy']);
 Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']);
 
 // Appel (Présences)
@@ -52,16 +56,22 @@ Route::get('/appointments', [AppointmentController::class, 'index']);
 // Parents
 Route::get('/parents', [ParentController::class, 'index']);
 Route::post('/parents', [ParentController::class, 'store']);
+Route::put('/parents/{id}', [ParentController::class, 'update']);
+Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 
 // Matieres
 Route::get('/matieres', [MatiereController::class, 'index']);
 Route::post('/matieres', [MatiereController::class, 'store']);
+Route::put('/matieres/{id}', [MatiereController::class, 'update']);
+Route::delete('/matieres/{id}', [MatiereController::class, 'destroy']);
 
 // Enseignants
 Route::get('/enseignants', [EnseignantController::class, 'index']);
 Route::post('/enseignants', [EnseignantController::class, 'store']);
+Route::put('/enseignants/{id}', [EnseignantController::class, 'update']);
+Route::delete('/enseignants/{id}', [EnseignantController::class, 'destroy']);
 
 // Notifications
 Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);

@@ -80,4 +80,48 @@ class EleveController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $data = [
+                'nom' => $request->input('nom'),
+                'prenom' => $request->input('prenom'),
+                'date_naissance' => $request->input('date_naissance') ?: null,
+                'lieu_naissance' => $request->input('lieu_naissance'),
+                'classe_id' => $request->input('classe_id'),
+                'updated_at' => now(),
+            ];
+            
+            if ($request->has('code_secret')) {
+                $data['code_secret'] = $request->input('code_secret');
+            }
+
+            if ($request->hasFile('photo')) {
+                $path = $request->file('photo')->store('photos', 'public');
+                $data['photo'] = $path;
+            }
+
+            DB::table('eleves')->where('id', $id)->update($data);
+
+            $eleve = DB::table('eleves')
+                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->select('eleves.*', 'classes.nom as classe_nom', 'classes.code as classe_code')
+                ->where('eleves.id', $id)
+                ->first();
+            return response()->json($eleve);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            DB::table('eleves')->where('id', $id)->delete();
+            return response()->json(['message' => 'Deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

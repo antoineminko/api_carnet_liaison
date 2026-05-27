@@ -82,4 +82,54 @@ class ParentController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            DB::table('parent_users')->where('id', $id)->update([
+                'nom' => $request->input('nom'),
+                'prenom' => $request->input('prenom'),
+                'email' => $request->input('email'),
+                'telephone' => $request->input('telephone'),
+                'updated_at' => now(),
+            ]);
+
+            if ($request->has('eleve_id')) {
+                DB::table('eleve_parents')->where('parent_id', $id)->delete();
+                if ($request->input('eleve_id')) {
+                    DB::table('eleve_parents')->insert([
+                        'eleve_id' => $request->input('eleve_id'),
+                        'parent_id' => $id,
+                        'relation' => 'Parent',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            $parent = DB::table('parent_users')
+                ->leftJoin('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
+                ->select(
+                    'parent_users.*',
+                    'eleve_parents.eleve_id',
+                    DB::raw('(SELECT COUNT(*) FROM eleve_parents ep WHERE ep.parent_id = parent_users.id) as nb_enfants')
+                )
+                ->where('parent_users.id', $id)
+                ->first();
+            return response()->json($parent);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            DB::table('eleve_parents')->where('parent_id', $id)->delete();
+            DB::table('parent_users')->where('id', $id)->delete();
+            return response()->json(['message' => 'Deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }
