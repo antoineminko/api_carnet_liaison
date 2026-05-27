@@ -41,7 +41,6 @@ class ParentController extends Controller
                 'updated_at' => now(),
             ]);
 
-            // Lier le parent à un élève si eleve_id est fourni
             if ($request->input('eleve_id')) {
                 DB::table('eleve_parents')->insert([
                     'eleve_id' => $request->input('eleve_id'),
