@@ -12,13 +12,6 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
-    protected $notificationService;
-
-    public function __construct(PushNotificationService $notificationService)
-    {
-        $this->notificationService = $notificationService;
-    }
-
     /**
      * Valider l'appel pour une classe
      */
@@ -69,11 +62,16 @@ class AttendanceController extends Controller
                                 $statusFr = $status === 'absent' ? 'absent' : 'en retard';
                                 $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
                                 
-                                $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                                    'eleve_id' => $eleveId,
-                                    'type' => 'attendance_alert',
-                                    'status' => $status
-                                ]);
+                                try {
+                                    $notificationService = app(PushNotificationService::class);
+                                    $notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                                        'eleve_id' => $eleveId,
+                                        'type' => 'attendance_alert',
+                                        'status' => $status
+                                    ]);
+                                } catch (\Exception $e) {
+                                    \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
+                                }
                             }
                         }
                     }
