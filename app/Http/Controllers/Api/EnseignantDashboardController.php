@@ -34,6 +34,11 @@ class EnseignantDashboardController extends Controller
         // Fusionner et dédupliquer par ID de classe
         $allClasses = $classes->concat($classesViaDevoirs)->unique('id')->values();
 
+        // Ajouter le nombre d'élèves pour chaque classe
+        foreach ($allClasses as $c) {
+            $c->students_count = DB::table('eleves')->where('classe_id', $c->id)->count();
+        }
+
         return response()->json([
             'success' => true,
             'teacher' => $enseignant,
