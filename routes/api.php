@@ -109,13 +109,15 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
     
     // 2. Check all parents tokens in DB
     $parents = \App\Models\ParentUser::select('id', 'nom', 'fcm_token')->get();
+    $links = \Illuminate\Support\Facades\DB::table('eleve_parents')->get();
     
     // 3. Test Firebase
     $token = $request->query('token');
     if (!$token) {
         return response()->json([
             'error' => 'Veuillez fournir un ?token= dans l\'url',
-            'database_parents' => $parents
+            'database_parents' => $parents,
+            'eleve_parents' => $links
         ]);
     }
     
@@ -126,7 +128,8 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
             'success' => $success,
             'message' => 'Cache vidé, et notification envoyée !',
             'token_used' => $token,
-            'database_parents' => $parents
+            'database_parents' => $parents,
+            'eleve_parents' => $links
         ]);
     } catch (\Exception $e) {
         return response()->json([
