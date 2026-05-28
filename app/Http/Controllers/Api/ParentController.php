@@ -78,7 +78,8 @@ class ParentController extends Controller
                     'ecoles.nom as ecole_nom',
                     'ecoles.code as ecole_code',
                     'eleve_parents.relation',
-                    'attendances.status as attendance_status'
+                    'attendances.status as attendance_status',
+                    'attendances.created_at as arrival_time'
                 )
                 ->where('eleve_parents.parent_id', $id)
                 ->get();
