@@ -101,3 +101,28 @@ Route::get('/user', function (Request $request) {
 
 use App\Http\Controllers\Api\EleveDashboardController;
 Route::get('/eleves/{id}/dashboard', [EleveDashboardController::class, 'getDashboard']);
+
+Route::get('/test-push', function(\Illuminate\Http\Request $request) {
+    // 1. Clear config cache
+    \Illuminate\Support\Facades\Artisan::call('config:clear');
+    \Illuminate\Support\Facades\Artisan::call('cache:clear');
+    
+    // 2. Test Firebase
+    $token = $request->query('token');
+    if (!$token) return response()->json(['error' => 'Veuillez fournir un ?token= dans l\'url']);
+    
+    try {
+        $notificationService = app(\App\Services\PushNotificationService::class);
+        $success = $notificationService->sendToToken($token, 'Test Alwaysdata', 'Ceci est un test direct depuis le serveur !');
+        return response()->json([
+            'success' => $success,
+            'message' => 'Cache vidé, et notification envoyée !',
+            'token_used' => $token
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
