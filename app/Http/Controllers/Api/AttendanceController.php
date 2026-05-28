@@ -46,21 +46,22 @@ class AttendanceController extends Controller
                         'status' => $status
                     ]
                 );
-
-                // If absent or late, send push notification to parents
-                if (in_array($status, ['absent', 'late'])) {
-                    $eleve = Eleve::find($eleveId);
+                // Send push notification to parents for any status
+                $eleve = Eleve::find($eleveId);
+                
+                if ($eleve) {
+                    // Find parents via eleve_parents table
+                    $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
                     
-                    if ($eleve) {
-                        // Find parents via eleve_parents table
-                        $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
-                        
-                        foreach ($parentLinks as $parentLink) {
-                            $parent = ParentUser::find($parentLink->parent_id);
-                            if ($parent && !empty($parent->fcm_token)) {
-                                $title = "Alerte de présence - " . $eleve->prenom;
-                                $statusFr = $status === 'absent' ? 'absent' : 'en retard';
-                                $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
+                    foreach ($parentLinks as $parentLink) {
+                        $parent = ParentUser::find($parentLink->parent_id);
+                        if ($parent && !empty($parent->fcm_token)) {
+                            $title = "Alerte de présence - " . $eleve->prenom;
+                            $statusFr = 'présent';
+                            if ($status === 'absent') $statusFr = 'absent';
+                            if ($status === 'late') $statusFr = 'en retard';
+                            
+                            $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
                                 
                                 try {
                                     $notificationService = app(PushNotificationService::class);
@@ -75,7 +76,6 @@ class AttendanceController extends Controller
                             }
                         }
                     }
-                }
             }
 
             DB::commit();

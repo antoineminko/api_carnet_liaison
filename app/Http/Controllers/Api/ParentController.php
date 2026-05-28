@@ -67,13 +67,18 @@ class ParentController extends Controller
                 ->join('eleve_parents', 'eleves.id', '=', 'eleve_parents.eleve_id')
                 ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
                 ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->leftJoin('attendances', function ($join) {
+                    $join->on('eleves.id', '=', 'attendances.eleve_id')
+                         ->where('attendances.date', '=', date('Y-m-d'));
+                })
                 ->select(
                     'eleves.*',
                     'classes.nom as classe_nom',
                     'classes.code as classe_code',
                     'ecoles.nom as ecole_nom',
                     'ecoles.code as ecole_code',
-                    'eleve_parents.relation'
+                    'eleve_parents.relation',
+                    'attendances.status as attendance_status'
                 )
                 ->where('eleve_parents.parent_id', $id)
                 ->get();

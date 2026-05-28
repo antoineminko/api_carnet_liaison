@@ -83,7 +83,12 @@ class EleveController extends Controller
     {
         try {
             $eleves = DB::table('eleves')
-                ->where('classe_id', $classeId)
+                ->leftJoin('attendances', function ($join) {
+                    $join->on('eleves.id', '=', 'attendances.eleve_id')
+                         ->where('attendances.date', '=', date('Y-m-d'));
+                })
+                ->where('eleves.classe_id', $classeId)
+                ->select('eleves.*', 'attendances.status as statut_presence')
                 ->get();
 
             $eleves = $eleves->map(function($eleve) {
