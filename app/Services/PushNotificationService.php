@@ -33,9 +33,12 @@ class PushNotificationService
         try {
             $notification = Notification::create($title, $body);
 
+            // Firebase FCM exige que toutes les valeurs dans "data" soient des chaînes de caractères (string).
+            $stringifiedData = array_map('strval', $data);
+
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
-                ->withData($data);
+                ->withData($stringifiedData);
 
             $this->messaging->send($message);
             return true;
