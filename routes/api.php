@@ -123,7 +123,7 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
     
     try {
         $notificationService = app(\App\Services\PushNotificationService::class);
-        $success = $notificationService->sendToToken($token, 'Test Alwaysdata', 'Ceci est un test direct depuis le serveur !');
+        $success = $notificationService->sendToToken($token, 'Test Alwaysdata', 'Ceci est un test direct depuis le serveur !', ['eleve_id' => 1]);
         return response()->json([
             'success' => $success,
             'message' => 'Cache vidé, et notification envoyée !',
