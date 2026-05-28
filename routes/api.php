@@ -107,9 +107,17 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
     \Illuminate\Support\Facades\Artisan::call('config:clear');
     \Illuminate\Support\Facades\Artisan::call('cache:clear');
     
-    // 2. Test Firebase
+    // 2. Check all parents tokens in DB
+    $parents = \App\Models\ParentUser::select('id', 'nom', 'fcm_token')->get();
+    
+    // 3. Test Firebase
     $token = $request->query('token');
-    if (!$token) return response()->json(['error' => 'Veuillez fournir un ?token= dans l\'url']);
+    if (!$token) {
+        return response()->json([
+            'error' => 'Veuillez fournir un ?token= dans l\'url',
+            'database_parents' => $parents
+        ]);
+    }
     
     try {
         $notificationService = app(\App\Services\PushNotificationService::class);
@@ -117,7 +125,8 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
         return response()->json([
             'success' => $success,
             'message' => 'Cache vidé, et notification envoyée !',
-            'token_used' => $token
+            'token_used' => $token,
+            'database_parents' => $parents
         ]);
     } catch (\Exception $e) {
         return response()->json([
