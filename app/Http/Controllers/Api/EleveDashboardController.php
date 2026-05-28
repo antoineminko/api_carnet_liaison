@@ -15,7 +15,7 @@ class EleveDashboardController extends Controller
             ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
             ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
             ->where('eleves.id', $id)
-            ->select('eleves.*', 'classes.nom as classe_nom', 'ecoles.nom as ecole_nom', 'ecoles.id as ecole_id')
+            ->select('eleves.*', 'classes.nom as classe_nom', 'ecoles.nom as ecole_nom', 'ecoles.id as ecole_id', 'classes.prof_principal_id')
             ->first();
 
         if (!$eleve) {
@@ -29,16 +29,29 @@ class EleveDashboardController extends Controller
             ->where('date', $today)
             ->first();
 
-        // 2. Professeurs de l'élève (via la classe ou l'école)
-        // Pour l'instant, on prend les professeurs de l'école ou le prof principal
+        // 2. Professeurs de l'élève
+        // On récupère le prof principal ou tous les profs liés à la classe (simulé ici via l'école si pas de lien strict)
         $teachers = DB::table('enseignants')
             ->where('ecole_id', $eleve->ecole_id)
             ->select('id', 'prenom', 'nom', 'matiere')
             ->get();
+        if ($eleve->prof_principal_id) {
+            $profPrincipal = DB::table('enseignants')->where('id', $eleve->prof_principal_id)->select('id', 'prenom', 'nom', 'matiere')->first();
+            if ($profPrincipal) {
+                // S'assurer qu'il est en tête de liste ou marquer comme principal
+                $profPrincipal->is_principal = true;
+                $teachers->prepend($profPrincipal);
+            }
+        }
 
-        // 3. Dernières notes (si table existante, sinon tableau vide pour le moment)
-        $grades = []; // TODO: intégrer la table notes quand elle sera créée
-
+        // 3. Notes (Notes de la semaine et Historique)
+        // MOCK : Simulation des notes car la table 'notes' n'est pas encore créée
+        $grades = [
+            // ['matiere' => 'Mathématiques', 'note' => '15/20', 'date' => date('Y-m-d', strtotime('-1 day'))],
+            // Décommenter pour simuler des notes, laisser vide sinon ("Aucune note")
+        ];
+        $grades_history = []; // Historique complet
+        
         // 4. Devoirs à venir
         $homeworks = DB::table('devoirs')
             ->where('classe_id', $eleve->classe_id)
@@ -46,11 +59,23 @@ class EleveDashboardController extends Controller
             ->orderBy('date_remise', 'asc')
             ->get();
 
-        // 5. Informations administratives (incidents / messages admin)
-        // Pour l'instant on se base sur les conversations admin s'il y en a, sinon vide
-        $adminInfos = [];
+        // 5. Actualités (News de l'école)
+        $actualites = [
+            ['id' => 1, 'titre' => 'Réunion Parents-Professeurs', 'contenu' => 'La réunion trimestrielle aura lieu ce vendredi à 15h00.', 'date' => date('Y-m-d', strtotime('+2 days')), 'type' => 'info'],
+        ];
 
-        // 6. Rendez-vous et appels vidéo
+        // 6. Informations administratives & Finances
+        $finances = [
+            'solde_restant' => 125000,
+            'frais_scolarite' => 450000,
+            'prochain_paiement' => date('Y-m-d', strtotime('+15 days')),
+            'devise' => 'FCFA'
+        ];
+        $adminInfos = [
+            ['id' => 1, 'titre' => 'Scolarité', 'contenu' => 'Veuillez régler le 2ème trimestre.', 'date' => $today, 'type' => 'finance']
+        ];
+
+        // 7. Rendez-vous
         $appointments = DB::table('appointments')
             ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
             ->where('appointments.eleve_id', $id)
@@ -58,14 +83,24 @@ class EleveDashboardController extends Controller
             ->orderBy('date_heure', 'asc')
             ->get();
 
+        // 8. Notifications non lues
+        // On récupère l'ID du parent lié (si possible, ici simulé à 4 ou basé sur table messages)
+        $unread_notifications_count = DB::table('messages')
+            ->where('is_read', false)
+            ->count(); // Mock simplifié
+
         return response()->json([
             'eleve' => $eleve,
             'attendance' => $attendance,
-            'teachers' => $teachers,
+            'teachers' => $teachers->unique('id')->values()->all(),
             'grades' => $grades,
+            'grades_history' => $grades_history,
             'homeworks' => $homeworks,
+            'actualites' => $actualites,
+            'finances' => $finances,
             'adminInfos' => $adminInfos,
-            'appointments' => $appointments
+            'appointments' => $appointments,
+            'unread_notifications_count' => $unread_notifications_count > 0 ? $unread_notifications_count : rand(0, 5) // Mock dynamique pour demo
         ]);
     }
 }

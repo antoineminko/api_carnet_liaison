@@ -79,7 +79,9 @@ class ParentController extends Controller
                 ->get();
 
             $eleves = $eleves->map(function($eleve) {
-                $eleve->photo_url = $eleve->photo ? env('APP_URL') . '/storage/' . $eleve->photo : null;
+                $eleve->photo_url = $eleve->photo ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo : null;
+                // Mock notification count
+                $eleve->notif_count = rand(0, 5); // Remplace par DB::table('messages')...
                 return $eleve;
             });
 

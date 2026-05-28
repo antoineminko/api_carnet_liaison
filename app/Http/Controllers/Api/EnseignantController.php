@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class EnseignantController extends Controller
 {
@@ -27,6 +28,7 @@ class EnseignantController extends Controller
                 'matiere' => $request->input('matiere', null),
                 'email' => $request->input('email', null),
                 'telephone' => $request->input('telephone', null),
+                'password' => $request->filled('password') ? Hash::make($request->input('password')) : null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -48,7 +50,7 @@ class EnseignantController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            DB::table('enseignants')->where('id', $id)->update([
+            $data = [
                 'nom' => $request->input('nom'),
                 'prenom' => $request->input('prenom'),
                 'matiere' => $request->input('matiere'),
@@ -57,7 +59,13 @@ class EnseignantController extends Controller
                 'est_prof_principal' => $request->input('est_prof_principal', false),
                 'classe_principale_id' => $request->input('classe_principale_id'),
                 'updated_at' => now(),
-            ]);
+            ];
+
+            if ($request->filled('password')) {
+                $data['password'] = Hash::make($request->input('password'));
+            }
+
+            DB::table('enseignants')->where('id', $id)->update($data);
 
             $enseignant = DB::table('enseignants')->where('id', $id)->first();
             return response()->json($enseignant);
