@@ -30,17 +30,29 @@ class EleveDashboardController extends Controller
             ->first();
 
         // 2. Professeurs de l'élève
-        // On récupère le prof principal ou tous les profs liés à la classe (simulé ici via l'école si pas de lien strict)
-        $teachers = DB::table('enseignants')
-            ->where('ecole_id', $eleve->ecole_id)
-            ->select('id', 'prenom', 'nom', 'matiere')
-            ->get();
+        // On récupère strictement les professeurs de la classe (prof_principal + ceux ayant assigné des devoirs)
+        $teachers = collect([]);
         if ($eleve->prof_principal_id) {
             $profPrincipal = DB::table('enseignants')->where('id', $eleve->prof_principal_id)->select('id', 'prenom', 'nom', 'matiere')->first();
             if ($profPrincipal) {
-                // S'assurer qu'il est en tête de liste ou marquer comme principal
                 $profPrincipal->is_principal = true;
-                $teachers->prepend($profPrincipal);
+                $teachers->push($profPrincipal);
+            }
+        }
+        
+        $otherTeachersIds = DB::table('devoirs')
+            ->where('classe_id', $eleve->classe_id)
+            ->whereNotNull('enseignant_id')
+            ->pluck('enseignant_id')
+            ->unique();
+            
+        foreach($otherTeachersIds as $teacherId) {
+            if ($teacherId != $eleve->prof_principal_id) {
+                $t = DB::table('enseignants')->where('id', $teacherId)->select('id', 'prenom', 'nom', 'matiere')->first();
+                if ($t) {
+                    $t->is_principal = false;
+                    $teachers->push($t);
+                }
             }
         }
 
