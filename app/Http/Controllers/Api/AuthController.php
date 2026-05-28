@@ -44,4 +44,42 @@ class AuthController extends Controller
             ],
         ]);
     }
+
+    public function loginTeacher(Request $request)
+    {
+        $request->validate([
+            'identifier' => 'required|string',
+            'password' => 'required|string',
+        ]);
+
+        $identifier = $request->input('identifier');
+
+        $teacher = \Illuminate\Support\Facades\DB::table('enseignants')
+            ->where('email', $identifier)
+            ->orWhere('telephone', $identifier)
+            ->first();
+
+        if (!$teacher) {
+            // Pour le démo, si l'enseignant n'existe pas, on le simule ou on retourne erreur.
+            return response()->json(['success' => false, 'message' => 'Enseignant introuvable'], 404);
+        }
+
+        // On ne vérifie pas le hash strict pour l'instant si password123 est utilisé et c'est une démo.
+        // Mais idéalement, Hash::check($request->password, $teacher->password)
+        if (!Hash::check($request->password, $teacher->password)) {
+            return response()->json(['success' => false, 'message' => 'Mot de passe incorrect'], 401);
+        }
+
+        return response()->json([
+            'success' => true,
+            'token' => 'mock-token-teacher-12345',
+            'teacher' => [
+                'id' => $teacher->id,
+                'nom' => $teacher->nom,
+                'prenom' => $teacher->prenom,
+                'email' => $teacher->email,
+                'telephone' => $teacher->telephone,
+            ],
+        ]);
+    }
 }

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\EleveController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\MatiereController;
 use App\Http\Controllers\Api\EnseignantController;
+use App\Http\Controllers\Api\EnseignantDashboardController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\DevoirController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\AdminMessageController;
 
 // Auth
 Route::post('/login/parent', [AuthController::class, 'loginParent']);
+Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
 
 // Liaison
 Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
@@ -72,6 +74,9 @@ Route::get('/enseignants', [EnseignantController::class, 'index']);
 Route::post('/enseignants', [EnseignantController::class, 'store']);
 Route::put('/enseignants/{id}', [EnseignantController::class, 'update']);
 Route::delete('/enseignants/{id}', [EnseignantController::class, 'destroy']);
+Route::get('/enseignants/{id}/dashboard', [EnseignantDashboardController::class, 'getDashboard']);
+Route::get('/enseignants/{id}/classes/{classId}', [EnseignantDashboardController::class, 'getClassDetails']);
+Route::get('/enseignants/student/{studentId}/info', [EnseignantDashboardController::class, 'getStudentInfo']);
 
 // Notifications
 Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);
