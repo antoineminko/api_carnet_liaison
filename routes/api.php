@@ -46,6 +46,7 @@ Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']
 
 // Appel (Présences)
 Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
+Route::delete('/attendances/reset', [AttendanceController::class, 'resetAttendance']);
 
 // Devoirs
 Route::post('/devoirs', [DevoirController::class, 'store']);

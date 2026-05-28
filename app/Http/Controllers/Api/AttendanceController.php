@@ -94,4 +94,33 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Réinitialiser l'appel pour une classe (supprime les présences du jour)
+     */
+    public function resetAttendance(Request $request)
+    {
+        $request->validate([
+            'classe_id' => 'required|integer',
+            'date'      => 'required|date'
+        ]);
+
+        try {
+            DB::table('attendances')
+                ->where('classe_id', $request->classe_id)
+                ->where('date', $request->date)
+                ->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'L\'appel du jour a été réinitialisé.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la réinitialisation de l\'appel.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
