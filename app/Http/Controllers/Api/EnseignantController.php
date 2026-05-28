@@ -28,12 +28,12 @@ class EnseignantController extends Controller
                 'matiere' => $request->input('matiere', null),
                 'email' => $request->input('email', null),
                 'telephone' => $request->input('telephone', null),
-                'password' => $request->filled('password') ? Hash::make($request->input('password')) : null,
+                'password' => Hash::make('password123'), // Fixé par défaut
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            // Assignation comme prof principal si demandé
+            // Assignation comme prof principal si demandÃ©
             if ($request->input('est_prof_principal') && $request->input('classe_principale_id')) {
                 DB::table('classes')
                     ->where('id', $request->input('classe_principale_id'))
@@ -60,10 +60,6 @@ class EnseignantController extends Controller
                 'classe_principale_id' => $request->input('classe_principale_id'),
                 'updated_at' => now(),
             ];
-
-            if ($request->filled('password')) {
-                $data['password'] = Hash::make($request->input('password'));
-            }
 
             DB::table('enseignants')->where('id', $id)->update($data);
 
