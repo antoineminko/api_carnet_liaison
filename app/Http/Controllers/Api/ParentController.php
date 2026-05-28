@@ -140,4 +140,30 @@ class ParentController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function getEvents($id)
+    {
+        // Rendez-vous (en_attente ou acceptÃ©s)
+        $appointments = DB::table('appointments')
+            ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
+            ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
+            ->where('appointments.parent_id', $id)
+            ->whereIn('appointments.statut', ['en_attente', 'accepte'])
+            ->select('appointments.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'eleves.nom as eleve_nom', 'eleves.prenom as eleve_prenom')
+            ->get();
+
+        // Conversations en attente (demandes de messagerie de l'enseignant vers le parent)
+        $conversations = DB::table('conversations')
+            ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
+            ->where('conversations.parent_id', $id)
+            ->where('conversations.status', 'pending')
+            ->select('conversations.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'appointments' => $appointments,
+            'conversations' => $conversations,
+        ]);
+    }
 }

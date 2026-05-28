@@ -61,6 +61,7 @@ Route::post('/parents', [ParentController::class, 'store']);
 Route::put('/parents/{id}', [ParentController::class, 'update']);
 Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
+Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 
 // Matieres
@@ -75,6 +76,7 @@ Route::post('/enseignants', [EnseignantController::class, 'store']);
 Route::put('/enseignants/{id}', [EnseignantController::class, 'update']);
 Route::delete('/enseignants/{id}', [EnseignantController::class, 'destroy']);
 Route::get('/enseignants/{id}/dashboard', [EnseignantDashboardController::class, 'getDashboard']);
+Route::get('/enseignants/{id}/events', [EnseignantDashboardController::class, 'getEvents']);
 Route::get('/enseignants/{id}/classes/{classId}', [EnseignantDashboardController::class, 'getClassDetails']);
 Route::get('/enseignants/student/{studentId}/info', [EnseignantDashboardController::class, 'getStudentInfo']);
 
@@ -83,6 +85,8 @@ Route::post('/notifications/register-token', [NotificationController::class, 're
 
 // Messagerie
 Route::get('/messages/conversation', [MessageController::class, 'getConversation']);
+Route::post('/messages/conversation/initiate', [MessageController::class, 'initiateConversation']);
+Route::put('/messages/conversation/{id}/status', [MessageController::class, 'updateConversationStatus']);
 Route::post('/messages', [MessageController::class, 'sendMessage']);
 
 // Administration Messages

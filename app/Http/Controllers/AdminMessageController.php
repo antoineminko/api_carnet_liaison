@@ -114,11 +114,15 @@ class AdminMessageController extends Controller
             ->join('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->join('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
             ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-            ->join('ecoles', 'eleves.ecole_id', '=', 'ecoles.id')
+            ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+            ->join('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
             ->whereNotNull('conversations.enseignant_id')
             ->when($ecole_id, fn($q) => $q->where('ecoles.id', $ecole_id))
+            ->where('conversations.status', 'accepted')
             ->select(
                 'conversations.id as conversation_id',
+                'conversations.status',
+                'conversations.subject',
                 'parent_users.nom as parent_nom',
                 'parent_users.prenom as parent_prenom',
                 'enseignants.nom as enseignant_nom',
@@ -129,6 +133,8 @@ class AdminMessageController extends Controller
             )
             ->groupBy(
                 'conversations.id',
+                'conversations.status',
+                'conversations.subject',
                 'parent_users.nom', 'parent_users.prenom',
                 'enseignants.nom', 'enseignants.prenom',
                 'eleves.id', 'eleves.nom', 'ecoles.nom'
