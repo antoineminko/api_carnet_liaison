@@ -56,12 +56,23 @@ class EnseignantController extends Controller
                 'matiere' => $request->input('matiere'),
                 'email' => $request->input('email'),
                 'telephone' => $request->input('telephone'),
-                'est_prof_principal' => $request->input('est_prof_principal', false),
-                'classe_principale_id' => $request->input('classe_principale_id'),
                 'updated_at' => now(),
             ];
 
             DB::table('enseignants')->where('id', $id)->update($data);
+
+            if ($request->input('est_prof_principal') && $request->input('classe_principale_id')) {
+                // Retirer cet enseignant des autres classes s'il était déjà prof principal ailleurs
+                DB::table('classes')->where('prof_principal_id', $id)->update(['prof_principal_id' => null]);
+                
+                // Assigner à la nouvelle classe
+                DB::table('classes')
+                    ->where('id', $request->input('classe_principale_id'))
+                    ->update(['prof_principal_id' => $id]);
+            } elseif ($request->has('est_prof_principal') && !$request->input('est_prof_principal')) {
+                // S'il ne doit plus être prof principal
+                DB::table('classes')->where('prof_principal_id', $id)->update(['prof_principal_id' => null]);
+            }
 
             $enseignant = DB::table('enseignants')->where('id', $id)->first();
             return response()->json($enseignant);
