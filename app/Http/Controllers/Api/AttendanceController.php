@@ -71,7 +71,7 @@ class AttendanceController extends Controller
                                             'type' => 'attendance_alert',
                                             'status' => (string)$status
                                         ]);
-                                    } catch (\Exception $e) {
+                                    } catch (\Throwable $e) {
                                         \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
                                     }
                             }
@@ -87,12 +87,13 @@ class AttendanceController extends Controller
                 'message' => 'Appel validé avec succès.'
             ]);
             
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de la validation de l\'appel.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ], 500);
         }
     }
