@@ -48,6 +48,20 @@ Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']
 Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
 Route::post('/attendances/reset', [AttendanceController::class, 'resetAttendance']);
 
+Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
+    $req = new \Illuminate\Http\Request();
+    // On teste avec la classe 1 et l'eleve 1. 
+    $req->merge([
+        "classe_id" => 1,
+        "date" => date('Y-m-d'),
+        "attendances" => [
+            ["eleve_id" => 1, "status" => "absent"]
+        ]
+    ]);
+    $controller = app()->make(\App\Http\Controllers\Api\AttendanceController::class);
+    return $controller->submitAttendance($req);
+});
+
 // Devoirs
 Route::post('/devoirs', [DevoirController::class, 'store']);
 
