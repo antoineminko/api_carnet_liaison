@@ -152,21 +152,28 @@ class ParentController extends Controller
 
     public function getEvents($id)
     {
-        // Rendez-vous (en_attente ou acceptÃ©s)
+        // Rendez-vous (en_attente ou acceptés)
         $appointments = DB::table('appointments')
             ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
             ->where('appointments.parent_id', $id)
             ->whereIn('appointments.statut', ['en_attente', 'accepte'])
-            ->select('appointments.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'eleves.nom as eleve_nom', 'eleves.prenom as eleve_prenom')
+            ->select('appointments.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'enseignants.matiere as enseignant_matiere', 'eleves.nom as eleve_nom', 'eleves.prenom as eleve_prenom')
             ->get();
 
         // Conversations en attente (demandes de messagerie de l'enseignant vers le parent)
         $conversations = DB::table('conversations')
             ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
+            ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.parent_id', $id)
             ->where('conversations.status', 'pending')
-            ->select('conversations.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom')
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('messages')
+                      ->whereColumn('messages.conversation_id', 'conversations.id')
+                      ->where('messages.sender_type', '!=', 'parent');
+            })
+            ->select('conversations.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'enseignants.matiere as enseignant_matiere', 'ecoles.nom as ecole_nom')
             ->get();
 
         return response()->json([

@@ -108,6 +108,40 @@ class MessageController extends Controller
         $conversation->status = $request->status;
         $conversation->save();
 
+        if ($request->status === 'rejected') {
+            $firstMessage = $conversation->messages()->orderBy('created_at', 'asc')->first();
+            if ($firstMessage) {
+                try {
+                    // If teacher sent first message, parent is rejecting -> notify teacher
+                    if ($firstMessage->sender_type === 'enseignant') {
+                        $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
+                        if ($enseignant && !empty($enseignant->fcm_token)) {
+                            $parent = \App\Models\ParentUser::find($conversation->parent_id);
+                            $parentName = $parent ? "{$parent->prenom} {$parent->nom}" : "Le parent";
+                            $this->notificationService->sendToToken($enseignant->fcm_token, "Discussion refusée", "{$parentName} a refusé d'établir une discussion avec vous.", [
+                                'type' => 'chat_rejected',
+                                'conversation_id' => (string)$conversation->id
+                            ]);
+                        }
+                    } 
+                    // If parent sent first message, teacher is rejecting -> notify parent
+                    elseif ($firstMessage->sender_type === 'parent') {
+                        $parent = \App\Models\ParentUser::find($conversation->parent_id);
+                        if ($parent && !empty($parent->fcm_token)) {
+                            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
+                            $enseignantName = $enseignant ? "{$enseignant->prenom} {$enseignant->nom}" : "L'enseignant";
+                            $this->notificationService->sendToToken($parent->fcm_token, "Discussion refusée", "{$enseignantName} a refusé d'établir une discussion avec vous.", [
+                                'type' => 'chat_rejected',
+                                'conversation_id' => (string)$conversation->id
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    \Log::error('Erreur Firebase (rejet conversation) : ' . $e->getMessage());
+                }
+            }
+        }
+
         return response()->json(['success' => true, 'conversation' => $conversation]);
     }
 
