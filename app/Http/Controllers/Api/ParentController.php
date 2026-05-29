@@ -86,8 +86,11 @@ class ParentController extends Controller
 
             $eleves = $eleves->map(function($eleve) {
                 $eleve->photo_url = $eleve->photo ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo : null;
-                // Mock notification count
-                $eleve->notif_count = rand(0, 5); // Remplace par DB::table('messages')...
+                // Count unread admin infos for this child
+                $eleve->notif_count = \Illuminate\Support\Facades\DB::table('admin_informations')
+                    ->where('eleve_id', $eleve->id)
+                    ->where('is_read', false)
+                    ->count();
                 return $eleve;
             });
 

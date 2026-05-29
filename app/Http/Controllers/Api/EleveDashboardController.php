@@ -121,10 +121,10 @@ class EleveDashboardController extends Controller
             ->get();
 
         // 8. Notifications non lues
-        // On récupère l'ID du parent lié (si possible, ici simulé à 4 ou basé sur table messages)
-        $unread_notifications_count = DB::table('messages')
+        $unread_notifications_count = DB::table('admin_informations')
+            ->where('eleve_id', $id)
             ->where('is_read', false)
-            ->count(); // Mock simplifié
+            ->count();
 
         return response()->json([
             'eleve' => $eleve,
@@ -137,7 +137,7 @@ class EleveDashboardController extends Controller
             'finances' => $finances,
             'adminInfos' => $adminInfos,
             'appointments' => $appointments,
-            'unread_notifications_count' => $unread_notifications_count > 0 ? $unread_notifications_count : rand(0, 5) // Mock dynamique pour demo
+            'unread_notifications_count' => $unread_notifications_count
         ]);
     }
 }
