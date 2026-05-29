@@ -67,9 +67,9 @@ class AttendanceController extends Controller
                                     try {
                                         $notificationService = app(PushNotificationService::class);
                                         $notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                                            'eleve_id' => $eleveId,
+                                            'eleve_id' => (string)$eleveId,
                                             'type' => 'attendance_alert',
-                                            'status' => $status
+                                            'status' => (string)$status
                                         ]);
                                     } catch (\Exception $e) {
                                         \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
