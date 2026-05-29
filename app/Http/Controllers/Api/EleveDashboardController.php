@@ -77,14 +77,39 @@ class EleveDashboardController extends Controller
         ];
 
         // 6. Informations administratives & Finances
+        $dbAdminInfos = DB::table('admin_informations')
+            ->where('eleve_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $adminInfos = [];
+        $totalMontantAdmin = 0;
+
+        foreach ($dbAdminInfos as $info) {
+            $adminInfos[] = [
+                'id'      => $info->id,
+                'titre'   => $info->titre ?? 'Information',
+                'contenu' => $info->contenu,
+                'date'    => $info->created_at,
+                'type'    => $info->type,
+                'montant' => $info->montant,
+                'is_read' => $info->is_read
+            ];
+            
+            if ($info->montant) {
+                $totalMontantAdmin += $info->montant;
+            }
+        }
+
+        // On simule une dette de base + la somme des montants demandés par l'admin
+        $baseDette = 125000;
+        $solde_restant = $baseDette + $totalMontantAdmin;
+
         $finances = [
-            'solde_restant' => 125000,
+            'solde_restant' => $solde_restant,
             'frais_scolarite' => 450000,
             'prochain_paiement' => date('Y-m-d', strtotime('+15 days')),
             'devise' => 'FCFA'
-        ];
-        $adminInfos = [
-            ['id' => 1, 'titre' => 'Scolarité', 'contenu' => 'Veuillez régler le 2ème trimestre.', 'date' => $today, 'type' => 'finance']
         ];
 
         // 7. Rendez-vous

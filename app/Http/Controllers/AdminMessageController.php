@@ -31,75 +31,105 @@ class AdminMessageController extends Controller
             'parent_id' => 'nullable|integer',
             'classe_id' => 'nullable|integer',
             'eleve_id'  => 'nullable|integer',
+            'montant'   => 'nullable|numeric',
+            'titre'     => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
 
-        $parentIds = [];
+        // Récupérer les élèves concernés au lieu de juste les parents, pour les admin_informations
+        $elevesList = [];
 
         // Cas 1 : Envoi à une classe entière
         if ($request->filled('classe_id')) {
-            $parentIds = DB::table('eleve_parents')
-                ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-                ->where('eleves.classe_id', $request->classe_id)
-                ->pluck('eleve_parents.parent_id')
-                ->unique()
+            $elevesList = DB::table('eleves')
+                ->where('classe_id', $request->classe_id)
+                ->pluck('id')
                 ->toArray();
         }
-        // Cas 2 : Envoi aux parents d'un élève spécifique
+        // Cas 2 : Envoi à un élève spécifique
         elseif ($request->filled('eleve_id')) {
-            $parentIds = DB::table('eleve_parents')
-                ->where('eleve_id', $request->eleve_id)
-                ->pluck('parent_id')
+            $elevesList = [$request->eleve_id];
+        }
+        // Cas 3 : Envoi à un parent unique (on récupère tous ses enfants dans l'école)
+        elseif ($request->filled('parent_id')) {
+            $elevesList = DB::table('eleve_parents')
+                ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('eleve_parents.parent_id', $request->parent_id)
+                ->where('classes.ecole_id', $request->ecole_id)
+                ->pluck('eleves.id')
                 ->unique()
                 ->toArray();
-        }
-        // Cas 3 : Envoi à un parent unique
-        elseif ($request->filled('parent_id')) {
-            $parentIds = [$request->parent_id];
         }
 
-        if (empty($parentIds)) {
-            return response()->json(['error' => 'Aucun destinataire trouvé.'], 400);
+        if (empty($elevesList)) {
+            return response()->json(['error' => 'Aucun élève/destinataire trouvé.'], 400);
         }
 
         $sentCount = 0;
+        $parentIdsSet = [];
 
-        foreach ($parentIds as $parentId) {
-            $conversation = Conversation::firstOrCreate([
-                'ecole_id'      => $request->ecole_id,
-                'enseignant_id' => null,
-                'parent_id'     => $parentId,
-            ]);
-
-            Message::create([
-                'conversation_id' => $conversation->id,
-                'sender_type'     => 'admin',
-                'sender_id'       => $request->ecole_id,
-                'content'         => $request->content,
-                'is_read'         => false,
-            ]);
-
-            // Push notification
-            $parent = ParentUser::find($parentId);
-            if ($parent && !empty($parent->fcm_token)) {
-                $title = "Nouveau message de l'Administration";
-                $body  = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
-
-                $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                    'conversation_id' => (string) $conversation->id,
-                    'type'            => 'admin_message',
+        foreach ($elevesList as $eleveId) {
+            // Créer l'AdminInformation si ce n'est pas textuel
+            if ($request->type !== 'textual') {
+                \App\Models\AdminInformation::create([
+                    'eleve_id' => $eleveId,
+                    'type'     => $request->type, // finance, convocation, info
+                    'titre'    => $request->titre ?? 'Information Administration',
+                    'contenu'  => $request->content,
+                    'montant'  => $request->montant,
+                    'is_read'  => false,
                 ]);
             }
 
-            $sentCount++;
+            // Récupérer les parents de cet élève
+            $parents = DB::table('eleve_parents')
+                ->where('eleve_id', $eleveId)
+                ->pluck('parent_id');
+
+            foreach ($parents as $parentId) {
+                // Créer Conversation & Message uniquement pour textual
+                if ($request->type === 'textual') {
+                    $conversation = Conversation::firstOrCreate([
+                        'ecole_id'      => $request->ecole_id,
+                        'enseignant_id' => null,
+                        'parent_id'     => $parentId,
+                    ]);
+
+                    Message::create([
+                        'conversation_id' => $conversation->id,
+                        'sender_type'     => 'admin',
+                        'sender_id'       => $request->ecole_id,
+                        'content'         => $request->content,
+                        'is_read'         => false,
+                    ]);
+                }
+
+                // Notification push unique par parent pour cet envoi
+                if (!in_array($parentId, $parentIdsSet)) {
+                    $parentIdsSet[] = $parentId;
+                    $parent = ParentUser::find($parentId);
+                    
+                    if ($parent && !empty($parent->fcm_token)) {
+                        $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
+                        $body  = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
+
+                        $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                            'type' => $request->type === 'textual' ? 'admin_message' : 'admin_info',
+                            'eleve_id' => (string) $eleveId,
+                        ]);
+                    }
+                    $sentCount++;
+                }
+            }
         }
 
         return response()->json([
             'success'    => true,
-            'message'    => "Message envoyé à {$sentCount} parent(s) avec succès.",
+            'message'    => "Message traité et envoyé à {$sentCount} parent(s) avec succès.",
             'sent_count' => $sentCount,
         ], 201);
     }
