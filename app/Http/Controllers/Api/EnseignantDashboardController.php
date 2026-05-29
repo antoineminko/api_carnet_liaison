@@ -106,4 +106,30 @@ class EnseignantDashboardController extends Controller
             ] : null
         ]);
     }
+
+    public function getEvents($id)
+    {
+        // Rendez-vous (en_attente ou acceptés)
+        $appointments = DB::table('appointments')
+            ->leftJoin('parent_users', 'appointments.parent_id', '=', 'parent_users.id')
+            ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
+            ->where('appointments.enseignant_id', $id)
+            ->whereIn('appointments.statut', ['en_attente', 'accepte'])
+            ->select('appointments.*', 'parent_users.nom as parent_nom', 'parent_users.prenom as parent_prenom', 'eleves.nom as eleve_nom', 'eleves.prenom as eleve_prenom')
+            ->get();
+
+        // Conversations en attente (demandes de messagerie du parent vers l'enseignant)
+        $conversations = DB::table('conversations')
+            ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
+            ->where('conversations.enseignant_id', $id)
+            ->where('conversations.status', 'pending')
+            ->select('conversations.*', 'parent_users.nom as parent_nom', 'parent_users.prenom as parent_prenom')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'appointments' => $appointments,
+            'conversations' => $conversations,
+        ]);
+    }
 }

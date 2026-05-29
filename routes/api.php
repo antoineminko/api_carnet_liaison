@@ -93,6 +93,7 @@ Route::post('/messages', [MessageController::class, 'sendMessage']);
 // Administration Messages
 Route::post('/admin/messages/send', [AdminMessageController::class, 'sendMessageToParent']);
 Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
+Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 
 // Protected routes
 Route::get('/user', function (Request $request) {

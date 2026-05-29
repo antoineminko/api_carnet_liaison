@@ -25,14 +25,16 @@ class AdminMessageController extends Controller
     public function sendMessageToParent(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'ecole_id'  => 'required|integer',
-            'type'      => 'required|string',
-            'content'   => 'required|string',
-            'parent_id' => 'nullable|integer',
-            'classe_id' => 'nullable|integer',
-            'eleve_id'  => 'nullable|integer',
-            'montant'   => 'nullable|numeric',
-            'titre'     => 'nullable|string',
+            'ecole_id'        => 'required|integer',
+            'type'            => 'required|string',
+            'content'         => 'required|string',
+            'parent_id'       => 'nullable|integer',
+            'classe_id'       => 'nullable|integer',
+            'eleve_id'        => 'nullable|integer',
+            'montant'         => 'nullable|numeric',
+            'montant_paye'    => 'nullable|numeric',
+            'montant_restant' => 'nullable|numeric',
+            'titre'           => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -64,6 +66,14 @@ class AdminMessageController extends Controller
                 ->unique()
                 ->toArray();
         }
+        // Cas 4 : Envoi global à toute l'école
+        else {
+            $elevesList = DB::table('eleves')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('classes.ecole_id', $request->ecole_id)
+                ->pluck('eleves.id')
+                ->toArray();
+        }
 
         if (empty($elevesList)) {
             return response()->json(['error' => 'Aucun élève/destinataire trouvé.'], 400);
@@ -76,12 +86,14 @@ class AdminMessageController extends Controller
             // Créer l'AdminInformation si ce n'est pas textuel
             if ($request->type !== 'textual') {
                 \App\Models\AdminInformation::create([
-                    'eleve_id' => $eleveId,
-                    'type'     => $request->type, // finance, convocation, info
-                    'titre'    => $request->titre ?? 'Information Administration',
-                    'contenu'  => $request->content,
-                    'montant'  => $request->montant,
-                    'is_read'  => false,
+                    'eleve_id'        => $eleveId,
+                    'type'            => $request->type, // finance, convocation, info
+                    'titre'           => $request->titre ?? 'Information Administration',
+                    'contenu'         => $request->content,
+                    'montant'         => $request->montant,
+                    'montant_paye'    => $request->montant_paye,
+                    'montant_restant' => $request->montant_restant,
+                    'is_read'         => false,
                 ]);
             }
 
@@ -174,6 +186,19 @@ class AdminMessageController extends Controller
         return response()->json([
             'success'        => true,
             'communications' => $conversations,
+        ]);
+    }
+
+    public function getAdminInformations($eleve_id)
+    {
+        $infos = DB::table('admin_informations')
+            ->where('eleve_id', $eleve_id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success'      => true,
+            'informations' => $infos,
         ]);
     }
 }
