@@ -47,6 +47,7 @@ class AppointmentController extends Controller
             'lien_video'    => $lien_video,
             'statut'        => 'en_attente',
             'motif'         => $request->motif,
+            'requester'     => $request->requester,
         ]);
 
         // Envoi notification
@@ -65,7 +66,19 @@ class AppointmentController extends Controller
                 ]);
             }
         } else {
-            // Notifier l'enseignant (si l'enseignant avait une app avec FCM, on le mettrait ici)
+            // Notifier l'enseignant
+            $parent = ParentUser::find($request->parent_id);
+            $enseignant = Enseignant::find($request->enseignant_id);
+            
+            if ($enseignant && !empty($enseignant->fcm_token)) {
+                $title = "Nouvelle demande de rendez-vous";
+                $body = "Le parent {$parent->prenom} {$parent->nom} a demandé un RDV pour le " . date('d/m/Y à H:i', strtotime($request->date_heure));
+                
+                $this->notificationService->sendToToken($enseignant->fcm_token, $title, $body, [
+                    'appointment_id' => (string)$appointment->id,
+                    'type' => 'appointment_request'
+                ]);
+            }
         }
 
         return response()->json([
@@ -86,16 +99,31 @@ class AppointmentController extends Controller
             'statut' => $request->statut
         ]);
 
-        // Envoyer une notification de mise à jour au parent
-        $parent = ParentUser::find($appointment->parent_id);
-        if ($parent && !empty($parent->fcm_token)) {
-            $title = "Mise à jour de votre rendez-vous";
-            $body = "Votre rendez-vous a été " . $request->statut;
-            
-            $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                'appointment_id' => (string)$appointment->id,
-                'type' => 'appointment_update'
-            ]);
+        // Déterminer qui notifier selon qui a fait la demande
+        if ($appointment->requester === 'parent') {
+            // L'enseignant a mis à jour, on notifie le parent
+            $parent = ParentUser::find($appointment->parent_id);
+            if ($parent && !empty($parent->fcm_token)) {
+                $title = "Mise à jour de votre rendez-vous";
+                $body = "Votre demande de rendez-vous a été " . $request->statut . "e.";
+                
+                $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                    'appointment_id' => (string)$appointment->id,
+                    'type' => 'appointment_update'
+                ]);
+            }
+        } else {
+            // Le parent a mis à jour, on notifie l'enseignant
+            $enseignant = Enseignant::find($appointment->enseignant_id);
+            if ($enseignant && !empty($enseignant->fcm_token)) {
+                $title = "Mise à jour d'un rendez-vous";
+                $body = "Votre demande de rendez-vous a été " . $request->statut . "e par le parent.";
+                
+                $this->notificationService->sendToToken($enseignant->fcm_token, $title, $body, [
+                    'appointment_id' => (string)$appointment->id,
+                    'type' => 'appointment_update'
+                ]);
+            }
         }
 
         return response()->json([

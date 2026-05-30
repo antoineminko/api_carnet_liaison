@@ -18,6 +18,7 @@ class Appointment extends Model
         'lien_video',
         'statut', // 'en_attente', 'accepte', 'refuse', 'reporte'
         'motif',
+        'requester', // 'parent' ou 'enseignant'
     ];
 
     public function enseignant()
