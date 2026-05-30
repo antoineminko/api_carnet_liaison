@@ -46,34 +46,32 @@ class AttendanceController extends Controller
                         'status' => $status
                     ]
                 );
-                // Send push notification to parents only for absent or late
-                if ($status === 'absent' || $status === 'late') {
-                    $eleve = Eleve::find($eleveId);
+                // Send push notification to parents for all statuses (present, absent, late)
+                $eleve = Eleve::find($eleveId);
+                
+                if ($eleve) {
+                    // Find parents via eleve_parents table
+                    $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
                     
-                    if ($eleve) {
-                        // Find parents via eleve_parents table
-                        $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
-                        
-                        foreach ($parentLinks as $parentLink) {
-                            $parent = ParentUser::find($parentLink->parent_id);
-                            if ($parent && !empty($parent->fcm_token)) {
-                                $title = "Alerte de présence - " . $eleve->prenom;
-                                $statusFr = 'présent';
-                                if ($status === 'absent') $statusFr = 'absent';
-                                if ($status === 'late') $statusFr = 'en retard';
+                    foreach ($parentLinks as $parentLink) {
+                        $parent = ParentUser::find($parentLink->parent_id);
+                        if ($parent && !empty($parent->fcm_token)) {
+                            $title = "Alerte de présence - " . $eleve->prenom;
+                            $statusFr = 'présent';
+                            if ($status === 'absent') $statusFr = 'absent';
+                            if ($status === 'late') $statusFr = 'en retard';
+                            
+                            $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
                                 
-                                $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
-                                    
-                                    try {
-                                        $notificationService = app(PushNotificationService::class);
-                                        $notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                                            'eleve_id' => (string)$eleveId,
-                                            'type' => 'attendance_alert',
-                                            'status' => (string)$status
-                                        ]);
-                                    } catch (\Throwable $e) {
-                                        \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
-                                    }
+                            try {
+                                $notificationService = app(PushNotificationService::class);
+                                $notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                                    'eleve_id' => (string)$eleveId,
+                                    'type' => 'attendance_alert',
+                                    'status' => (string)$status
+                                ]);
+                            } catch (\Throwable $e) {
+                                \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
                             }
                         }
                     }
