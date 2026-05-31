@@ -118,19 +118,18 @@ class MessageController extends Controller
                         if ($enseignant && !empty($enseignant->fcm_token)) {
                             $parent = \App\Models\ParentUser::find($conversation->parent_id);
                             $parentName = $parent ? "{$parent->prenom} {$parent->nom}" : "Le parent";
-                            $this->notificationService->sendToToken($enseignant->fcm_token, "Discussion refusée", "{$parentName} a refusé d'établir une discussion avec vous.", [
+                            $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, "Discussion refusée", "{$parentName} a refusé d'établir une discussion avec vous.", [
                                 'type' => 'chat_rejected',
                                 'conversation_id' => (string)$conversation->id
                             ]);
                         }
-                    } 
-                    // If parent sent first message, teacher is rejecting -> notify parent
-                    elseif ($firstMessage->sender_type === 'parent') {
+                    } else {
+                        // C'est l'enseignant qui avait envoyé le 1er message, on notifie le parent
                         $parent = \App\Models\ParentUser::find($conversation->parent_id);
                         if ($parent && !empty($parent->fcm_token)) {
                             $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
                             $enseignantName = $enseignant ? "{$enseignant->prenom} {$enseignant->nom}" : "L'enseignant";
-                            $this->notificationService->sendToToken($parent->fcm_token, "Discussion refusée", "{$enseignantName} a refusé d'établir une discussion avec vous.", [
+                            $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, "Discussion refusée", "{$enseignantName} a refusé d'établir une discussion avec vous.", [
                                 'type' => 'chat_rejected',
                                 'conversation_id' => (string)$conversation->id
                             ]);
@@ -177,11 +176,11 @@ class MessageController extends Controller
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
                 if ($parent && !empty($parent->fcm_token)) {
-                    $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : "L'école";
+                    $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : "L'École";
                     $title = "Nouveau message de {$senderName}";
                     $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
 
-                    $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                    $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, [
                         'conversation_id' => (string) $conversation->id,
                         'type' => 'teacher_message'
                     ]);
@@ -211,6 +210,22 @@ class MessageController extends Controller
             )
             ->get();
 
+        // Récupérer le nom de l'élève pour le contexte
+        $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
+            ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+            ->where('eleve_parents.parent_id', $parent_id)
+            ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
+            ->first();
+
+        foreach ($conversations as $conv) {
+            if ($eleve) {
+                $conv->eleve_nom = $eleve->nom;
+                $conv->eleve_prenom = $eleve->prenom;
+                $conv->classe_nom = $eleve->classe_nom;
+            }
+        }
+
         return response()->json([
             'success' => true,
             'conversations' => $conversations
@@ -221,19 +236,19 @@ class MessageController extends Controller
     public function getConversationsForTeacher($enseignant_id)
     {
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
-            ->leftJoin('parents', 'conversations.parent_id', '=', 'parents.id')
+            ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
             ->where('conversations.enseignant_id', $enseignant_id)
             ->select(
                 'conversations.id as conversation_id',
                 'conversations.parent_id',
                 'conversations.status',
                 'conversations.subject',
-                'parents.nom as parent_nom',
-                'parents.prenom as parent_prenom'
+                'parent_users.nom as parent_nom',
+                'parent_users.prenom as parent_prenom'
             )
             ->get();
 
-        // Pour chaque conversation, récupérer le dernier message
+        // Pour chaque conversation, récupérer le dernier message et le contexte de l'élève
         foreach ($conversations as $conv) {
             $lastMessage = Message::where('conversation_id', $conv->conversation_id)
                 ->orderBy('created_at', 'desc')
@@ -241,6 +256,19 @@ class MessageController extends Controller
                 
             $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
             $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
+
+            $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
+                ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('eleve_parents.parent_id', $conv->parent_id)
+                ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
+                ->first();
+
+            if ($eleve) {
+                $conv->eleve_nom = $eleve->nom;
+                $conv->eleve_prenom = $eleve->prenom;
+                $conv->classe_nom = $eleve->classe_nom;
+            }
         }
 
         return response()->json([

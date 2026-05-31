@@ -47,4 +47,22 @@ class PushNotificationService
             return false;
         }
     }
+
+    /**
+     * Envoyer une notification push et l'enregistrer en base de données.
+     */
+    public function sendAndSave($userType, $userId, $token, $title, $body, $data = [])
+    {
+        // Enregistrer en base
+        \App\Models\Notification::create([
+            'user_type' => $userType,
+            'user_id' => $userId,
+            'type' => $data['type'] ?? 'general',
+            'title' => $title,
+            'message' => $body,
+            'data' => $data,
+        ]);
+
+        return $this->sendToToken($token, $title, $body, $data);
+    }
 }

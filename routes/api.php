@@ -98,6 +98,8 @@ Route::get('/enseignants/student/{studentId}/info', [EnseignantDashboardControll
 
 // Notifications
 Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);
+Route::get('/users/{role}/{user_id}/notifications', [NotificationController::class, 'index']);
+Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 
 // Messagerie
 Route::get('/messages/conversation', [MessageController::class, 'getConversation']);

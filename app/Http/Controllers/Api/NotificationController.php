@@ -33,5 +33,34 @@ class NotificationController extends Controller
             'message' => 'Token FCM enregistré avec succès.',
         ]);
     }
+
+    public function index($role, $user_id)
+    {
+        if (!in_array($role, ['parent', 'enseignant', 'admin'])) {
+            return response()->json(['success' => false, 'error' => 'Rôle invalide'], 400);
+        }
+
+        $notifications = \App\Models\Notification::where('user_type', $role)
+            ->where('user_id', $user_id)
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'notifications' => $notifications
+        ]);
+    }
+
+    public function markAsRead($id)
+    {
+        $notification = \App\Models\Notification::find($id);
+        if ($notification) {
+            $notification->is_read = true;
+            $notification->save();
+        }
+
+        return response()->json(['success' => true]);
+    }
 }
 
