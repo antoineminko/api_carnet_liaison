@@ -78,6 +78,7 @@ Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
 Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
+Route::get('/enseignants/{id}/conversations', [MessageController::class, 'getConversationsForTeacher']);
 
 // Matieres
 Route::get('/matieres', [MatiereController::class, 'index']);

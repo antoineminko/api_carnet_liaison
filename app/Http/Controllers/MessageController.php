@@ -216,4 +216,36 @@ class MessageController extends Controller
             'conversations' => $conversations
         ]);
     }
+
+    // Obtenir toutes les conversations pour un enseignant
+    public function getConversationsForTeacher($enseignant_id)
+    {
+        $conversations = \Illuminate\Support\Facades\DB::table('conversations')
+            ->leftJoin('parents', 'conversations.parent_id', '=', 'parents.id')
+            ->where('conversations.enseignant_id', $enseignant_id)
+            ->select(
+                'conversations.id as conversation_id',
+                'conversations.parent_id',
+                'conversations.status',
+                'conversations.subject',
+                'parents.nom as parent_nom',
+                'parents.prenom as parent_prenom'
+            )
+            ->get();
+
+        // Pour chaque conversation, récupérer le dernier message
+        foreach ($conversations as $conv) {
+            $lastMessage = Message::where('conversation_id', $conv->conversation_id)
+                ->orderBy('created_at', 'desc')
+                ->first();
+                
+            $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
+            $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
+        }
+
+        return response()->json([
+            'success' => true,
+            'conversations' => $conversations
+        ]);
+    }
 }
