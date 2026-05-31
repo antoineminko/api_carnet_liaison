@@ -166,7 +166,7 @@ class ParentController extends Controller
             ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.parent_id', $id)
-            ->where('conversations.status', 'pending')
+            ->whereIn('conversations.status', ['pending', 'accepted', 'rejected'])
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                       ->from('messages')

@@ -128,7 +128,7 @@ class EnseignantDashboardController extends Controller
         $conversations = DB::table('conversations')
             ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
             ->where('conversations.enseignant_id', $id)
-            ->where('conversations.status', 'pending')
+            ->whereIn('conversations.status', ['pending', 'accepted', 'rejected'])
             ->select('conversations.*', 'parent_users.nom as parent_nom', 'parent_users.prenom as parent_prenom')
             ->get();
 
