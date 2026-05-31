@@ -77,10 +77,20 @@ class EnseignantDashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Elève non trouvé'], 404);
         }
 
-        $parent = null;
-        $relation = DB::table('eleve_parents')->where('eleve_id', $studentId)->first();
-        if ($relation) {
-            $parent = DB::table('parent_users')->where('id', $relation->parent_id)->first();
+        $parents = [];
+        $relations = DB::table('eleve_parents')->where('eleve_id', $studentId)->get();
+        foreach ($relations as $relation) {
+            $parentInfo = DB::table('parent_users')->where('id', $relation->parent_id)->first();
+            if ($parentInfo) {
+                $parents[] = [
+                    'id' => $parentInfo->id,
+                    'nom' => $parentInfo->nom,
+                    'prenom' => $parentInfo->prenom,
+                    'telephone' => $parentInfo->telephone,
+                    'email' => $parentInfo->email,
+                    'relation' => $relation->relation ?? 'Parent',
+                ];
+            }
         }
 
         // Calculer l'âge si date_naissance existe
@@ -99,13 +109,7 @@ class EnseignantDashboardController extends Controller
                 'age' => $age,
                 'date_naissance' => $eleve->date_naissance,
             ],
-            'parent' => $parent ? [
-                'id' => $parent->id,
-                'nom' => $parent->nom,
-                'prenom' => $parent->prenom,
-                'telephone' => $parent->telephone,
-                'email' => $parent->email,
-            ] : null
+            'parents' => $parents
         ]);
     }
 
