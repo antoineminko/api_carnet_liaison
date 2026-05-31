@@ -78,8 +78,9 @@ class EnseignantDashboardController extends Controller
         }
 
         $parent = null;
-        if ($eleve->parent_id) {
-            $parent = DB::table('parent_users')->where('id', $eleve->parent_id)->first();
+        $relation = DB::table('eleve_parents')->where('eleve_id', $studentId)->first();
+        if ($relation) {
+            $parent = DB::table('parent_users')->where('id', $relation->parent_id)->first();
         }
 
         // Calculer l'âge si date_naissance existe
@@ -99,6 +100,7 @@ class EnseignantDashboardController extends Controller
                 'date_naissance' => $eleve->date_naissance,
             ],
             'parent' => $parent ? [
+                'id' => $parent->id,
                 'nom' => $parent->nom,
                 'prenom' => $parent->prenom,
                 'telephone' => $parent->telephone,
