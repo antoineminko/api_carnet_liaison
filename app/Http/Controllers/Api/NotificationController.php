@@ -58,6 +58,12 @@ class NotificationController extends Controller
         if ($notification) {
             $notification->is_read = true;
             $notification->save();
+
+            if ($notification->type === 'admin_info' && isset($notification->data['admin_info_id'])) {
+                \Illuminate\Support\Facades\DB::table('admin_informations')
+                    ->where('id', $notification->data['admin_info_id'])
+                    ->update(['is_read' => true]);
+            }
         }
 
         return response()->json(['success' => true]);

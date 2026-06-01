@@ -83,11 +83,12 @@ class AdminMessageController extends Controller
         $parentIdsSet = [];
 
         foreach ($elevesList as $eleveId) {
-            // Créer l'AdminInformation si ce n'est pas textuel
+            $adminInfo = null;
+
             if ($request->type !== 'textual') {
-                \App\Models\AdminInformation::create([
+                $adminInfo = \App\Models\AdminInformation::create([
                     'eleve_id'        => $eleveId,
-                    'type'            => $request->type, // finance, convocation, info
+                    'type'            => $request->type,
                     'titre'           => $request->titre ?? 'Information Administration',
                     'contenu'         => $request->content,
                     'montant'         => $request->montant,
@@ -130,7 +131,6 @@ class AdminMessageController extends Controller
                     ]);
                 }
 
-                // Notification push unique par parent pour cet envoi
                 if (!in_array($parentId, $parentIdsSet)) {
                     $parentIdsSet[] = $parentId;
                     $parent = ParentUser::find($parentId);
@@ -146,9 +146,11 @@ class AdminMessageController extends Controller
 
                         if ($request->type === 'textual' && isset($conversation)) {
                             $notificationData['conversation_id'] = (string) $conversation->id;
+                        } elseif ($adminInfo) {
+                            $notificationData['admin_info_id'] = (string) $adminInfo->id;
                         }
 
-                        $this->notificationService->sendToToken($parent->fcm_token, $title, $body, $notificationData);
+                        $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
                     }
                     $sentCount++;
                 }
