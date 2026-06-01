@@ -139,10 +139,16 @@ class AdminMessageController extends Controller
                         $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
                         $body  = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
 
-                        $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                        $notificationData = [
                             'type' => $request->type === 'textual' ? 'admin_message' : 'admin_info',
                             'eleve_id' => (string) $eleveId,
-                        ]);
+                        ];
+
+                        if ($request->type === 'textual' && isset($conversation)) {
+                            $notificationData['conversation_id'] = (string) $conversation->id;
+                        }
+
+                        $this->notificationService->sendToToken($parent->fcm_token, $title, $body, $notificationData);
                     }
                     $sentCount++;
                 }
