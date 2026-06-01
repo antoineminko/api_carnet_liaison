@@ -39,6 +39,14 @@ class MessageController extends Controller
             return response()->json(['error' => 'Conversation non trouvée'], 404);
         }
 
+        $viewer_type = $request->input('viewer_type');
+        if ($viewer_type) {
+            $conversation->messages()
+                ->where('sender_type', '!=', $viewer_type)
+                ->where('is_read', false)
+                ->update(['is_read' => true]);
+        }
+
         $messages = $conversation->messages()->orderBy('created_at', 'asc')->get();
 
         return response()->json([
