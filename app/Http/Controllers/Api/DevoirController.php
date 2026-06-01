@@ -51,10 +51,23 @@ class DevoirController extends Controller
                 $title = "Nouveau devoir : {$request->matiere}";
                 $body = "À rendre pour le " . date('d/m/Y', strtotime($request->date_remise)) . "\n" . $request->titre;
 
-                $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                $data = [
                     'devoir_id' => (string) $devoir->id,
-                    'type' => 'new_homework'
-                ]);
+                    'type' => 'new_homework',
+                    'classe_id' => (string) $request->classe_id,
+                    'matiere' => $request->matiere,
+                    'titre' => $request->titre,
+                ];
+
+                // Enregistrer la notification en base + envoyer le push
+                $this->notificationService->sendAndSave(
+                    'parent',
+                    $parentId,
+                    $parent->fcm_token,
+                    $title,
+                    $body,
+                    $data
+                );
                 $sentCount++;
             }
         }
