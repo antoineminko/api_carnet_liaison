@@ -23,14 +23,18 @@ class MessageController extends Controller
     // Récupérer les messages d'une conversation (ou la créer si elle n'existe pas)
     public function getConversation(Request $request)
     {
+        $conversation_id = $request->input('conversation_id');
         $enseignant_id = $request->input('enseignant_id');
         $parent_id = $request->input('parent_id');
 
-        if (!$enseignant_id || !$parent_id) {
-            return response()->json(['error' => 'enseignant_id et parent_id requis'], 400);
+        if ($conversation_id) {
+            $conversation = Conversation::find($conversation_id);
+        } else if ($enseignant_id && $parent_id) {
+            $conversation = Conversation::where('enseignant_id', $enseignant_id)->where('parent_id', $parent_id)->first();
+        } else {
+            return response()->json(['error' => 'conversation_id ou (enseignant_id et parent_id) requis'], 400);
         }
 
-        $conversation = Conversation::where('enseignant_id', $enseignant_id)->where('parent_id', $parent_id)->first();
         if (!$conversation) {
             return response()->json(['error' => 'Conversation non trouvée'], 404);
         }
@@ -159,7 +163,7 @@ class MessageController extends Controller
         }
 
         $conversation = Conversation::find($request->conversation_id);
-        if ($conversation->status !== 'accepted') {
+        if ($conversation->status !== 'accepted' && $conversation->enseignant_id !== null) {
             return response()->json(['error' => 'Conversation non acceptée'], 403);
         }
 

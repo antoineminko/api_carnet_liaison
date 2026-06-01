@@ -105,11 +105,21 @@ class AdminMessageController extends Controller
             foreach ($parents as $parentId) {
                 // Créer Conversation & Message uniquement pour textual
                 if ($request->type === 'textual') {
-                    $conversation = Conversation::firstOrCreate([
-                        'ecole_id'      => $request->ecole_id,
-                        'enseignant_id' => null,
-                        'parent_id'     => $parentId,
-                    ]);
+                    $conversation = Conversation::firstOrCreate(
+                        [
+                            'ecole_id'      => $request->ecole_id,
+                            'enseignant_id' => null,
+                            'parent_id'     => $parentId,
+                        ],
+                        [
+                            'status' => 'accepted'
+                        ]
+                    );
+
+                    // If it already existed but wasn't accepted, update it
+                    if ($conversation->status !== 'accepted') {
+                        $conversation->update(['status' => 'accepted']);
+                    }
 
                     Message::create([
                         'conversation_id' => $conversation->id,
