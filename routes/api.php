@@ -163,3 +163,52 @@ Route::get('/test-push', function(\Illuminate\Http\Request $request) {
         ], 500);
     }
 });
+
+// Test simple pour vérifier la création d'incident
+Route::post('/test-incident', function(\Illuminate\Http\Request $request) {
+    try {
+        $eleveId = $request->input('eleve_id', 1);
+        $enseignantId = $request->input('enseignant_id', 1);
+        
+        // Vérifier que les modèles existent
+        $eleve = \App\Models\Eleve::find($eleveId);
+        $enseignant = \App\Models\Enseignant::find($enseignantId);
+        
+        if (!$eleve) {
+            return response()->json(['error' => 'Eleve not found'], 404);
+        }
+        if (!$enseignant) {
+            return response()->json(['error' => 'Enseignant not found'], 404);
+        }
+        
+        // Créer un incident de test
+        $incident = \App\Models\Incident::create([
+            'eleve_id' => $eleveId,
+            'enseignant_id' => $enseignantId,
+            'classe_id' => $eleve->classe_id,
+            'type' => 'test',
+            'description' => 'Test incident',
+            'date' => now(),
+            'is_read' => false
+        ]);
+        
+        // Essayer d'envoyer la notification
+        $controller = new \App\Http\Controllers\Api\IncidentController();
+        $typeLabel = \App\Models\Incident::getTypeLabel('test');
+        $controller->notifyParents($eleve, $enseignant, $incident, $typeLabel);
+        
+        return response()->json([
+            'success' => true,
+            'incident_id' => $incident->id,
+            'eleve' => $eleve->prenom . ' ' . $eleve->nom,
+            'enseignant' => $enseignant->prenom . ' ' . $enseignant->nom,
+            'message' => 'Incident créé et notification tentée. Vérifiez les logs.'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});

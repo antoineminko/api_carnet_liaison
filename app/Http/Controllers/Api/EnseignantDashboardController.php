@@ -63,6 +63,12 @@ class EnseignantDashboardController extends Controller
             ->select('id', 'nom', 'prenom', 'photo', 'statut')
             ->get();
 
+        // Ajouter l'URL complète de la photo
+        $eleves = $eleves->map(function($eleve) {
+            $eleve->photo_url = $eleve->photo ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo : null;
+            return $eleve;
+        });
+
         return response()->json([
             'success' => true,
             'classe' => $classe,

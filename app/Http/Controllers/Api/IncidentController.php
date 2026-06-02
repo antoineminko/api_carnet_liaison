@@ -177,7 +177,7 @@ class IncidentController extends Controller
     /**
      * Notifier les parents d'un incident
      */
-    private function notifyParents($eleve, $enseignant, $incident, $typeLabel)
+    public function notifyParents($eleve, $enseignant, $incident, $typeLabel)
     {
         try {
             // Récupérer les parents via la table eleve_parents
@@ -189,6 +189,8 @@ class IncidentController extends Controller
                 \Log::info('Aucun parent lié pour l\'élève ' . $eleve->id);
                 return;
             }
+            
+            \Log::info('Incident notification: ' . $parentLinks->count() . ' parents trouvés pour l\'élève ' . $eleve->id);
 
             $notificationService = app(PushNotificationService::class);
             
@@ -199,7 +201,8 @@ class IncidentController extends Controller
                 $parent = \App\Models\ParentUser::find($parentLink->parent_id);
                 
                 if ($parent && !empty($parent->fcm_token)) {
-                    $notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                    \Log::info('Envoi notification au parent ' . $parent->id . ' - Token: ' . substr($parent->fcm_token, 0, 20) . '...');
+                    $result = $notificationService->sendToToken($parent->fcm_token, $title, $body, [
                         'eleve_id' => (string)$eleve->id,
                         'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
                         'type' => 'incident',
@@ -209,6 +212,9 @@ class IncidentController extends Controller
                         'matiere' => $enseignant->matiere ?? '',
                         'date' => $incident->date->format('Y-m-d')
                     ]);
+                    \Log::info('Résultat notification: ' . json_encode($result));
+                } else {
+                    \Log::warning('Parent ' . ($parent->id ?? 'N/A') . ' sans FCM token');
                 }
             }
         } catch (\Exception $e) {
