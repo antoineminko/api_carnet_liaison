@@ -24,10 +24,42 @@ class EleveDashboardController extends Controller
 
         // 1. Présences du jour
         $today = date('Y-m-d');
-        $attendance = DB::table('attendances')
+        $attendanceRow = DB::table('attendances')
             ->where('eleve_id', $id)
             ->where('date', $today)
             ->first();
+
+        // Enrichissement pour l'aperçu parent
+        $attendance = null;
+        if ($attendanceRow) {
+            $statutFr = 'Présent';
+            if ($attendanceRow->status === 'absent') $statutFr = 'Absent';
+            if ($attendanceRow->status === 'late')  $statutFr = 'En retard';
+
+            $teacherName = null;
+            $matiere = null;
+            if (!empty($eleve->prof_principal_id)) {
+                $t = DB::table('enseignants')
+                    ->where('id', $eleve->prof_principal_id)
+                    ->select('prenom', 'nom', 'matiere')
+                    ->first();
+                if ($t) {
+                    $teacherName = trim(($t->prenom ?? '') . ' ' . ($t->nom ?? ''));
+                    $matiere = $t->matiere ?? null;
+                }
+            }
+
+            $ts = $attendanceRow->updated_at ?? $attendanceRow->created_at ?? null;
+            $heureArrivee = $ts ? date('H:i', strtotime($ts)) : null;
+
+            $attendance = [
+                'statut' => $statutFr,
+                'date' => $attendanceRow->date,
+                'heure_arrivee' => $heureArrivee,
+                'matiere' => $matiere,
+                'enseignant_nom' => $teacherName,
+            ];
+        }
 
         // 2. Professeurs de l'élève
         // On récupère strictement les professeurs de la classe (prof_principal + ceux ayant assigné des devoirs)
