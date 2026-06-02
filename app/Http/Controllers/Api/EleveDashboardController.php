@@ -105,7 +105,16 @@ class EleveDashboardController extends Controller
 
         // 5. Actualités (News de l'école)
         $actualites = [
-            ['id' => 1, 'titre' => 'Réunion Parents-Professeurs', 'contenu' => 'La réunion trimestrielle aura lieu ce vendredi à 15h00.', 'date' => date('Y-m-d', strtotime('+2 days')), 'type' => 'info'],
+            [
+                'id' => 1,
+                'type' => 'MESSE',
+                'titre' => 'Messe d\'ouverture semaine résurrection du Christ',
+                'contenu' => 'Rejoignez-nous pour la célébration de la messe d\'ouverture de la semaine de la résurrection du Christ. Une moment de recueillement et de prière pour toute la communauté scolaire.',
+                'image_url' => 'https://i.pinimg.com/736x/51/b1/a7/51b1a798455b0af03492963412bf1689.jpg',
+                'date' => '2026-06-15',
+                'heure' => '09:00',
+                'celebrant' => 'Père Jean-Pierre Moussavou'
+            ],
         ];
 
         // 6. Informations administratives & Finances
@@ -133,16 +142,9 @@ class EleveDashboardController extends Controller
             }
         }
 
-        // On simule une dette de base + la somme des montants demandés par l'admin
-        $baseDette = 125000;
-        $solde_restant = $baseDette + $totalMontantAdmin;
-
-        $finances = [
-            'solde_restant' => $solde_restant,
-            'frais_scolarite' => 450000,
-            'prochain_paiement' => date('Y-m-d', strtotime('+15 days')),
-            'devise' => 'FCFA'
-        ];
+        // Finances dynamiques - SECTION DÉSACTIVÉE pour l'instant
+        // Pour réactiver, remplacer par la logique dynamique avec admin_informations
+        $finances = null; // Toujours null pour cacher la section "Reste à payer"
 
         // 7. Rendez-vous
         $appointments = DB::table('appointments')
