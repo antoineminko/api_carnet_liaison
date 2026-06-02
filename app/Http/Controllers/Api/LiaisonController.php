@@ -44,23 +44,15 @@ class LiaisonController extends Controller
         if ($exists) {
             return response()->json([
                 'success' => true,
-                'message' => 'Cet enfant est déjà lié à votre compte.',
+                'message' => 'Liaison vérifiée avec succès.',
                 'eleve' => $eleve
             ]);
         }
 
-        DB::table('eleve_parents')->insert([
-            'eleve_id' => $eleve->id,
-            'parent_id' => $parent->id,
-            'relation' => 'Parent',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
         return response()->json([
-            'success' => true,
-            'eleve' => $eleve
-        ]);
+            'success' => false,
+            'message' => "Vous n'êtes pas autorisé car vous n'êtes pas identifié à ce compte. Contactez l'administration."
+        ], 403);
     }
 
     public function linkWithQrCode(Request $request)

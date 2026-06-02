@@ -23,13 +23,12 @@ class AuthController extends Controller
             ->first();
 
         if (!$parent) {
-            $parent = ParentUser::create([
-                'nom' => 'Demo',
-                'prenom' => 'Parent',
-                'email' => str_contains($identifier, '@') ? $identifier : null,
-                'password' => Hash::make($request->password),
-                'telephone' => str_contains($identifier, '@') ? '0000000000' : $identifier
-            ]);
+            return response()->json(['success' => false, 'message' => 'Parent introuvable'], 404);
+        }
+
+        if (!Hash::check($request->password, $parent->password)) {
+            // Optionnel : permettre un mot de passe global fixé "parent123" si souhaité par le client, mais Hash::check est mieux.
+            return response()->json(['success' => false, 'message' => 'Mot de passe incorrect'], 401);
         }
 
         return response()->json([
