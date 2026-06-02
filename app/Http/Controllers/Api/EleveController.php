@@ -16,8 +16,7 @@ class EleveController extends Controller
                 ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
                 ->select(
                     'eleves.*',
-                    'classes.nom as classe_nom',
-                    'classes.code as classe_code'
+                    'classes.nom as classe_nom'
                 )
                 ->get();
 
@@ -127,7 +126,10 @@ class EleveController extends Controller
 
             $eleve = DB::table('eleves')
                 ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-                ->select('eleves.*', 'classes.nom as classe_nom', 'classes.code as classe_code')
+                ->select(
+                    'eleves.*',
+                    'classes.nom as classe_nom'
+                )
                 ->where('eleves.id', $id)
                 ->first();
             
