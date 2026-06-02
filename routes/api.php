@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\DevoirController;
 use App\Http\Controllers\Api\AppointmentController;
+use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\AdminMessageController;
 
@@ -48,6 +49,11 @@ Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']
 // Appel (Présences)
 Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
 Route::post('/attendances/reset', [AttendanceController::class, 'resetAttendance']);
+
+// Incidents (Signalements enseignants)
+Route::post('/incidents', [IncidentController::class, 'store']);
+Route::get('/eleves/{eleveId}/incidents', [IncidentController::class, 'getByEleve']);
+Route::put('/incidents/{id}/read', [IncidentController::class, 'markAsRead']);
 
 Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
     $req = new \Illuminate\Http\Request();
