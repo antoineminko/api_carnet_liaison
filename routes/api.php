@@ -26,6 +26,7 @@ Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
 // Liaison
 Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
 Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
+Route::post('/admin/parents/link-child', [LiaisonController::class, 'adminLinkChild']);
 
 // Ecoles
 Route::get('/ecoles', [EcoleController::class, 'index']);
