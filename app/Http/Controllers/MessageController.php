@@ -93,12 +93,84 @@ class MessageController extends Controller
             'is_read' => false
         ]);
 
-        // Simuler notification push
+        // Envoyer notification push à l'autre partie
+        $this->sendConversationInitiationNotification($conversation, $request->sender_type, $request->initial_message);
+
         return response()->json([
             'success' => true,
             'conversation' => $conversation,
             'message' => $message
         ]);
+    }
+
+    /**
+     * Envoyer une notification lors de l'initiation d'une conversation
+     */
+    private function sendConversationInitiationNotification($conversation, $senderType, $messageContent)
+    {
+        try {
+            if ($senderType === 'enseignant') {
+                // L'enseignant initie, on notifie le parent
+                $parent = ParentUser::find($conversation->parent_id);
+                $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                    ->where('id', $conversation->enseignant_id)
+                    ->first();
+
+                if ($parent && !empty($parent->fcm_token) && $enseignant) {
+                    $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
+                    $title = "💬 Nouveau message de {$enseignantName}";
+                    $body = substr($messageContent, 0, 100) . (strlen($messageContent) > 100 ? '...' : '');
+
+                    $this->notificationService->sendAndSave(
+                        'parent',
+                        $parent->id,
+                        $parent->fcm_token,
+                        $title,
+                        $body,
+                        [
+                            'type' => 'new_conversation_request',
+                            'conversation_id' => (string)$conversation->id,
+                            'enseignant_id' => (string)$conversation->enseignant_id,
+                            'enseignant_nom' => $enseignantName,
+                            'subject' => $conversation->subject,
+                            'status' => 'pending',
+                            'action' => 'validate_conversation' // Le parent doit valider la liaison
+                        ]
+                    );
+                }
+            } else {
+                // Le parent initie, on notifie l'enseignant
+                $parent = ParentUser::find($conversation->parent_id);
+                $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                    ->where('id', $conversation->enseignant_id)
+                    ->first();
+
+                if ($enseignant && !empty($enseignant->fcm_token) && $parent) {
+                    $parentName = trim("{$parent->prenom} {$parent->nom}");
+                    $title = "💬 Nouveau message de {$parentName}";
+                    $body = substr($messageContent, 0, 100) . (strlen($messageContent) > 100 ? '...' : '');
+
+                    $this->notificationService->sendAndSave(
+                        'enseignant',
+                        $enseignant->id,
+                        $enseignant->fcm_token,
+                        $title,
+                        $body,
+                        [
+                            'type' => 'new_conversation_request',
+                            'conversation_id' => (string)$conversation->id,
+                            'parent_id' => (string)$conversation->parent_id,
+                            'parent_nom' => $parentName,
+                            'subject' => $conversation->subject,
+                            'status' => 'pending',
+                            'action' => 'validate_conversation' // L'enseignant doit valider la liaison
+                        ]
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::error('Erreur notification initiation conversation : ' . $e->getMessage());
+        }
     }
 
     // Accepter ou Refuser la conversation
@@ -121,39 +193,123 @@ class MessageController extends Controller
         $conversation->save();
 
         if ($request->status === 'rejected') {
-            $firstMessage = $conversation->messages()->orderBy('created_at', 'asc')->first();
-            if ($firstMessage) {
-                try {
-                    // If teacher sent first message, parent is rejecting -> notify teacher
-                    if ($firstMessage->sender_type === 'enseignant') {
-                        $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
-                        if ($enseignant && !empty($enseignant->fcm_token)) {
-                            $parent = \App\Models\ParentUser::find($conversation->parent_id);
-                            $parentName = $parent ? "{$parent->prenom} {$parent->nom}" : "Le parent";
-                            $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, "Discussion refusée", "{$parentName} a refusé d'établir une discussion avec vous.", [
-                                'type' => 'chat_rejected',
-                                'conversation_id' => (string)$conversation->id
-                            ]);
-                        }
-                    } else {
-                        // C'est l'enseignant qui avait envoyé le 1er message, on notifie le parent
-                        $parent = \App\Models\ParentUser::find($conversation->parent_id);
-                        if ($parent && !empty($parent->fcm_token)) {
-                            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
-                            $enseignantName = $enseignant ? "{$enseignant->prenom} {$enseignant->nom}" : "L'enseignant";
-                            $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, "Discussion refusée", "{$enseignantName} a refusé d'établir une discussion avec vous.", [
-                                'type' => 'chat_rejected',
-                                'conversation_id' => (string)$conversation->id
-                            ]);
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    \Log::error('Erreur Firebase (rejet conversation) : ' . $e->getMessage());
-                }
-            }
+            $this->sendConversationStatusNotification($conversation, 'rejected');
+        } elseif ($request->status === 'accepted') {
+            $this->sendConversationStatusNotification($conversation, 'accepted');
         }
 
         return response()->json(['success' => true, 'conversation' => $conversation]);
+    }
+
+    /**
+     * Envoyer une notification lors du changement de statut d'une conversation
+     */
+    private function sendConversationStatusNotification($conversation, $status)
+    {
+        try {
+            $firstMessage = $conversation->messages()->orderBy('created_at', 'asc')->first();
+            if (!$firstMessage) return;
+
+            $senderWasEnseignant = $firstMessage->sender_type === 'enseignant';
+
+            if ($status === 'rejected') {
+                // Notifier l'expéditeur du premier message que sa demande a été refusée
+                if ($senderWasEnseignant) {
+                    // L'enseignant avait initié, on notifie l'enseignant que le parent a refusé
+                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                        ->where('id', $conversation->enseignant_id)
+                        ->first();
+                    if ($enseignant && !empty($enseignant->fcm_token)) {
+                        $parent = ParentUser::find($conversation->parent_id);
+                        $parentName = $parent ? trim("{$parent->prenom} {$parent->nom}") : "Le parent";
+                        $this->notificationService->sendAndSave(
+                            'enseignant',
+                            $enseignant->id,
+                            $enseignant->fcm_token,
+                            "❌ Liaison refusée",
+                            "{$parentName} a refusé d'établir une discussion avec vous.",
+                            [
+                                'type' => 'chat_rejected',
+                                'conversation_id' => (string)$conversation->id,
+                                'status' => 'rejected'
+                            ]
+                        );
+                    }
+                } else {
+                    // Le parent avait initié, on notifie le parent que l'enseignant a refusé
+                    $parent = ParentUser::find($conversation->parent_id);
+                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                        ->where('id', $conversation->enseignant_id)
+                        ->first();
+                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
+                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
+                        $this->notificationService->sendAndSave(
+                            'parent',
+                            $parent->id,
+                            $parent->fcm_token,
+                            "❌ Liaison refusée",
+                            "{$enseignantName} a refusé d'établir une discussion avec vous.",
+                            [
+                                'type' => 'chat_rejected',
+                                'conversation_id' => (string)$conversation->id,
+                                'status' => 'rejected'
+                            ]
+                        );
+                    }
+                }
+            } elseif ($status === 'accepted') {
+                // Notifier l'expéditeur du premier message que sa demande a été acceptée
+                if ($senderWasEnseignant) {
+                    // L'enseignant avait initié, on notifie l'enseignant que le parent a accepté
+                    // (mais l'enseignant sait déjà qu'il a envoyé le message, donc on pourrait ne pas notifier)
+                    // On notifie plutôt le parent que la conversation est active
+                    $parent = ParentUser::find($conversation->parent_id);
+                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                        ->where('id', $conversation->enseignant_id)
+                        ->first();
+                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
+                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
+                        $this->notificationService->sendAndSave(
+                            'parent',
+                            $parent->id,
+                            $parent->fcm_token,
+                            "✅ Liaison acceptée",
+                            "Vous pouvez maintenant discuter avec {$enseignantName}.",
+                            [
+                                'type' => 'chat_accepted',
+                                'conversation_id' => (string)$conversation->id,
+                                'status' => 'accepted',
+                                'action' => 'open_chat'
+                            ]
+                        );
+                    }
+                } else {
+                    // Le parent avait initié, on notifie le parent que l'enseignant a accepté
+                    $parent = ParentUser::find($conversation->parent_id);
+                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                        ->where('id', $conversation->enseignant_id)
+                        ->first();
+                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
+                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
+                        $this->notificationService->sendAndSave(
+                            'parent',
+                            $parent->id,
+                            $parent->fcm_token,
+                            "✅ Liaison acceptée",
+                            "{$enseignantName} a accepté votre demande de discussion.",
+                            [
+                                'type' => 'chat_accepted',
+                                'conversation_id' => (string)$conversation->id,
+                                'status' => 'accepted',
+                                'action' => 'open_chat'
+                            ]
+                        );
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::error('Erreur notification statut conversation : ' . $e->getMessage());
+        }
     }
 
     // Envoyer un nouveau message

@@ -77,7 +77,10 @@ Route::get('/classes/{classeId}/eleves', [DevoirController::class, 'getClassStud
 // Rendez-vous
 Route::post('/appointments', [AppointmentController::class, 'store']);
 Route::put('/appointments/{id}/status', [AppointmentController::class, 'updateStatus']);
+Route::put('/appointments/{id}/accept-postponed', [AppointmentController::class, 'acceptPostponedDate']);
+Route::put('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
 Route::get('/appointments', [AppointmentController::class, 'index']);
+Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
 
 // Parents
 Route::get('/parents', [ParentController::class, 'index']);
@@ -115,6 +118,28 @@ Route::get('/messages/conversation', [MessageController::class, 'getConversation
 Route::post('/messages/conversation/initiate', [MessageController::class, 'initiateConversation']);
 Route::put('/messages/conversation/{id}/status', [MessageController::class, 'updateConversationStatus']);
 Route::post('/messages', [MessageController::class, 'sendMessage']);
+
+// Appels (Calls)
+Route::post('/calls', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
+Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
+Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
+Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
+Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
+Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
+
+// Signaling WebRTC
+Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
+Route::post('/calls/{callId}/answer', [\App\Http\Controllers\Api\CallController::class, 'storeAnswer']);
+Route::post('/calls/{callId}/ice-candidate', [\App\Http\Controllers\Api\CallController::class, 'storeIceCandidate']);
+Route::get('/calls/{callId}/signaling', [\App\Http\Controllers\Api\CallController::class, 'getSignaling']);
+
+// Signalements (Reports)
+Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
+Route::get('/reports', [\App\Http\Controllers\Api\ReportController::class, 'index']);
+Route::get('/reports/{id}', [\App\Http\Controllers\Api\ReportController::class, 'show']);
+Route::put('/reports/{id}/status', [\App\Http\Controllers\Api\ReportController::class, 'updateStatus']);
+Route::get('/reports/user', [\App\Http\Controllers\Api\ReportController::class, 'getUserReports']);
+Route::get('/reports/against', [\App\Http\Controllers\Api\ReportController::class, 'getReportsAgainstUser']);
 
 // Administration Messages
 Route::post('/admin/messages/send', [AdminMessageController::class, 'sendMessageToParent']);

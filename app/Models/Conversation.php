@@ -9,7 +9,11 @@ class Conversation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['ecole_id', 'enseignant_id', 'parent_id'];
+    protected $fillable = ['ecole_id', 'enseignant_id', 'parent_id', 'status', 'subject'];
+
+    protected $attributes = [
+        'status' => 'pending',
+    ];
 
     public function messages()
     {

@@ -13,11 +13,15 @@ class Appointment extends Model
         'enseignant_id',
         'parent_id',
         'eleve_id',
+        'objet',
         'date_heure',
-        'type', // 'physique' ou 'video'
+        'new_proposed_date',
+        'type', // 'physique' ou 'video' (legacy)
+        'mode', // 'presentiel', 'vocal', 'video'
         'lien_video',
         'statut', // 'en_attente', 'accepte', 'refuse', 'reporte'
         'motif',
+        'report_reason',
         'requester', // 'parent' ou 'enseignant'
     ];
 
