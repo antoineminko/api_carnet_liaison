@@ -96,12 +96,43 @@ class EleveDashboardController extends Controller
         ];
         $grades_history = []; // Historique complet
         
-        // 4. Devoirs à venir
-        $homeworks = DB::table('devoirs')
-            ->where('classe_id', $eleve->classe_id)
-            ->where('date_remise', '>=', $today)
-            ->orderBy('date_remise', 'asc')
+        // 4. Devoirs à venir (filtrer selon ciblage spécifique ou classe entière)
+        $homeworksRaw = DB::table('devoirs')
+            ->leftJoin('devoir_eleve', 'devoirs.id', '=', 'devoir_eleve.devoir_id')
+            ->where('devoirs.classe_id', $eleve->classe_id)
+            ->where('devoirs.date_remise', '>=', $today)
+            ->where(function ($query) use ($id) {
+                $query->whereNull('devoir_eleve.eleve_id')
+                      ->orWhere('devoir_eleve.eleve_id', $id);
+            })
+            ->orderBy('devoirs.date_remise', 'asc')
+            ->select(
+                'devoirs.id',
+                'devoirs.titre',
+                'devoirs.description',
+                'devoirs.matiere',
+                'devoirs.type',
+                'devoirs.date_remise',
+                'devoirs.created_at',
+                'devoirs.enseignant_id',
+                'devoir_eleve.eleve_id as ciblage_eleve_id'
+            )
             ->get();
+
+        $homeworks = $homeworksRaw->map(function ($hw) use ($id) {
+            return [
+                'id' => $hw->id,
+                'titre' => $hw->titre,
+                'description' => $hw->description,
+                'matiere' => $hw->matiere,
+                'type' => $hw->type ?? 'maison',
+                'date_remise' => $hw->date_remise,
+                'created_at' => $hw->created_at,
+                'enseignant_id' => $hw->enseignant_id,
+                'is_targeted' => $hw->ciblage_eleve_id !== null,
+                'is_for_me' => $hw->ciblage_eleve_id === null || $hw->ciblage_eleve_id == $id,
+            ];
+        });
 
         // 5. Actualités (News de l'école)
         $actualites = [

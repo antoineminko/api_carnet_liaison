@@ -13,9 +13,14 @@ class Devoir extends Model
         'classe_id',
         'enseignant_id',
         'matiere',
+        'type',
         'titre',
         'description',
         'date_remise',
+    ];
+
+    protected $casts = [
+        'date_remise' => 'date',
     ];
 
     public function classe()
