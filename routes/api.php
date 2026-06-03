@@ -91,6 +91,7 @@ Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
 Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 Route::get('/enseignants/{id}/conversations', [MessageController::class, 'getConversationsForTeacher']);
+Route::get('/enseignants/{id}/admin-conversations', [MessageController::class, 'getAdminConversationsForTeacher']);
 
 // Matieres
 Route::get('/matieres', [MatiereController::class, 'index']);
@@ -140,6 +141,7 @@ Route::get('/reports/{id}', [\App\Http\Controllers\Api\ReportController::class, 
 Route::put('/reports/{id}/status', [\App\Http\Controllers\Api\ReportController::class, 'updateStatus']);
 Route::get('/reports/user', [\App\Http\Controllers\Api\ReportController::class, 'getUserReports']);
 Route::get('/reports/against', [\App\Http\Controllers\Api\ReportController::class, 'getReportsAgainstUser']);
+Route::get('/reports/eleve/{eleve_id}', [\App\Http\Controllers\Api\ReportController::class, 'getReportsForEleve']);
 
 // Administration Messages
 Route::post('/admin/messages/send', [AdminMessageController::class, 'sendMessageToParent']);

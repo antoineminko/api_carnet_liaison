@@ -339,20 +339,34 @@ class MessageController extends Controller
             'is_read' => false
         ]);
 
-        // Envoyer une notification push au parent si l'expéditeur n'est pas le parent lui-même
+        // Envoyer une notification push au destinataire
+        $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : ($request->sender_type === 'parent' ? "Un parent" : "L'École");
+        $title = "Nouveau message de {$senderName}";
+        $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
+
+        // Notifier le parent si l'expéditeur est l'enseignant ou admin
         if ($request->sender_type !== 'parent') {
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
                 if ($parent && !empty($parent->fcm_token)) {
-                    $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : "L'École";
-                    $title = "Nouveau message de {$senderName}";
-                    $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
-
                     $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, [
                         'conversation_id' => (string) $conversation->id,
                         'type' => 'teacher_message'
                     ]);
                 }
+            }
+        }
+
+        // Notifier l'enseignant si l'expéditeur est le parent
+        if ($request->sender_type === 'parent' && $conversation && $conversation->enseignant_id) {
+            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                ->where('id', $conversation->enseignant_id)
+                ->first();
+            if ($enseignant && !empty($enseignant->fcm_token)) {
+                $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, [
+                    'conversation_id' => (string) $conversation->id,
+                    'type' => 'parent_message'
+                ]);
             }
         }
 
@@ -438,6 +452,46 @@ class MessageController extends Controller
                 $conv->eleve_prenom = $eleve->prenom;
                 $conv->classe_nom = $eleve->classe_nom;
             }
+        }
+
+        return response()->json([
+            'success' => true,
+            'conversations' => $conversations
+        ]);
+    }
+
+    // Obtenir les conversations admin-enseignant pour un enseignant
+    public function getAdminConversationsForTeacher($enseignant_id)
+    {
+        $conversations = \Illuminate\Support\Facades\DB::table('conversations')
+            ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
+            ->where('conversations.enseignant_id', $enseignant_id)
+            ->whereNull('conversations.parent_id') // Conversations sans parent = admin
+            ->select(
+                'conversations.id as conversation_id',
+                'conversations.ecole_id',
+                'conversations.status',
+                'conversations.subject',
+                'ecoles.nom as admin_name',
+                'ecoles.id as admin_id'
+            )
+            ->get();
+
+        // Pour chaque conversation, récupérer le dernier message
+        foreach ($conversations as $conv) {
+            $lastMessage = Message::where('conversation_id', $conv->conversation_id)
+                ->orderBy('created_at', 'desc')
+                ->first();
+                
+            $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
+            $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
+
+            // Compter les messages non lus
+            $unreadCount = Message::where('conversation_id', $conv->conversation_id)
+                ->where('sender_type', '!=', 'enseignant')
+                ->where('is_read', false)
+                ->count();
+            $conv->unread_count = $unreadCount;
         }
 
         return response()->json([

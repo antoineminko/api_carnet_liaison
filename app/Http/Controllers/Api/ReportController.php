@@ -271,4 +271,38 @@ class ReportController extends Controller
             \Log::error('Erreur notification signaleur : ' . $e->getMessage());
         }
     }
+
+    // Obtenir les signalements liés à un élève spécifique
+    public function getReportsForEleve($eleve_id)
+    {
+        try {
+            $reports = Report::where('eleve_id', $eleve_id)
+                ->with(['eleve', 'classe'])
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($report) {
+                    return [
+                        'id' => $report->id,
+                        'reason' => $report->reason,
+                        'description' => $report->description,
+                        'status' => $report->status,
+                        'created_at' => $report->created_at->format('d/m/Y H:i'),
+                        'eleve_nom' => $report->eleve ? $report->eleve->nom : null,
+                        'eleve_prenom' => $report->eleve ? $report->eleve->prenom : null,
+                        'classe_nom' => $report->classe ? $report->classe->nom : null,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'reports' => $reports,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Erreur récupération signalements élève: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la récupération des signalements',
+            ], 500);
+        }
+    }
 }
