@@ -99,6 +99,7 @@ class EleveDashboardController extends Controller
         // 4. Devoirs à venir (filtrer selon ciblage spécifique ou classe entière)
         $homeworksRaw = DB::table('devoirs')
             ->leftJoin('devoir_eleve', 'devoirs.id', '=', 'devoir_eleve.devoir_id')
+            ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
             ->where('devoirs.classe_id', $eleve->classe_id)
             ->where('devoirs.date_remise', '>=', $today)
             ->where(function ($query) use ($id) {
@@ -115,7 +116,9 @@ class EleveDashboardController extends Controller
                 'devoirs.date_remise',
                 'devoirs.created_at',
                 'devoirs.enseignant_id',
-                'devoir_eleve.eleve_id as ciblage_eleve_id'
+                'devoir_eleve.eleve_id as ciblage_eleve_id',
+                'enseignants.nom as prof_nom',
+                'enseignants.prenom as prof_prenom'
             )
             ->get();
 
@@ -129,6 +132,7 @@ class EleveDashboardController extends Controller
                 'date_remise' => $hw->date_remise,
                 'created_at' => $hw->created_at,
                 'enseignant_id' => $hw->enseignant_id,
+                'enseignant_nom' => trim(($hw->prof_prenom ?? '') . ' ' . ($hw->prof_nom ?? '')),
                 'is_targeted' => $hw->ciblage_eleve_id !== null,
                 'is_for_me' => $hw->ciblage_eleve_id === null || $hw->ciblage_eleve_id == $id,
             ];
