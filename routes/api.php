@@ -72,7 +72,7 @@ Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
 // Devoirs
 Route::post('/devoirs', [DevoirController::class, 'store']);
 Route::get('/enseignants/{teacherId}/classes', [DevoirController::class, 'getTeacherClasses']);
-Route::get('/classes/{classeId}/eleves', [DevoirController::class, 'getClassStudents']);
+Route::get('/classes/{classeId}/eleves-devoirs', [DevoirController::class, 'getClassStudents']);
 
 // Rendez-vous
 Route::post('/appointments', [AppointmentController::class, 'store']);
