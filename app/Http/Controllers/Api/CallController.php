@@ -397,15 +397,23 @@ class CallController extends Controller
     {
         $call = Call::findOrFail($callId);
 
-        // Récupérer les données non traitées
-        $signaling = CallSignaling::where('call_id', $callId)
+        // L'offre : toujours disponible, jamais consommée (le receveur peut poller plusieurs fois)
+        $offer = CallSignaling::where('call_id', $callId)
+            ->where('type', 'offer')
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        // Answer et ICE candidates : consommés une seule fois (processed)
+        $others = CallSignaling::where('call_id', $callId)
             ->where('processed', false)
+            ->whereIn('type', ['answer', 'ice_candidate'])
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // Marquer comme traitées
+        // Marquer uniquement answer et ICE candidates comme traités
         CallSignaling::where('call_id', $callId)
             ->where('processed', false)
+            ->whereIn('type', ['answer', 'ice_candidate'])
             ->update(['processed' => true]);
 
         // Organiser les données
@@ -415,22 +423,24 @@ class CallController extends Controller
             'ice_candidates' => [],
         ];
 
-        foreach ($signaling as $item) {
-            if ($item->type === 'offer') {
-                $result['offer'] = [
-                    'sdp' => $item->sdp,
-                    'type' => 'offer',
-                ];
-            } elseif ($item->type === 'answer') {
+        if ($offer) {
+            $result['offer'] = [
+                'sdp'  => $offer->sdp,
+                'type' => 'offer',
+            ];
+        }
+
+        foreach ($others as $item) {
+            if ($item->type === 'answer') {
                 $result['answer'] = [
-                    'sdp' => $item->sdp,
+                    'sdp'  => $item->sdp,
                     'type' => 'answer',
                 ];
             } elseif ($item->type === 'ice_candidate') {
                 $result['ice_candidates'][] = [
-                    'candidate' => $item->candidate,
-                    'sdpMid' => $item->sdp_mid,
-                    'sdpMLineIndex' => $item->sdp_m_line_index,
+                    'candidate'      => $item->candidate,
+                    'sdpMid'         => $item->sdp_mid,
+                    'sdpMLineIndex'  => $item->sdp_m_line_index,
                 ];
             }
         }
