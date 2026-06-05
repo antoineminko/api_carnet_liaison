@@ -14,19 +14,27 @@ class NotificationController extends Controller
     public function registerToken(Request $request)
     {
         $request->validate([
-            'parent_id' => 'required|integer', 
-            'token'     => 'required|string',
-            'platform'  => 'nullable|string',
+            'parent_id'     => 'nullable|integer', 
+            'enseignant_id' => 'nullable|integer', 
+            'token'         => 'required|string',
+            'platform'      => 'nullable|string',
         ]);
 
-        $parent = ParentUser::find($request->parent_id);
-        
-        if (!$parent) {
-            return response()->json(['success' => false, 'message' => 'Parent introuvable'], 404);
+        if ($request->has('parent_id') && $request->parent_id) {
+            $parent = ParentUser::find($request->parent_id);
+            if ($parent) {
+                $parent->fcm_token = $request->token;
+                $parent->save();
+            }
         }
 
-        $parent->fcm_token = $request->token;
-        $parent->save();
+        if ($request->has('enseignant_id') && $request->enseignant_id) {
+            $enseignant = \App\Models\Enseignant::find($request->enseignant_id);
+            if ($enseignant) {
+                $enseignant->fcm_token = $request->token;
+                $enseignant->save();
+            }
+        }
 
         return response()->json([
             'success' => true,
