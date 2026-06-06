@@ -62,7 +62,6 @@ class EleveDashboardController extends Controller
         }
 
         // 2. Professeurs de l'élève
-        // On récupère strictement les professeurs de la classe (prof_principal + ceux ayant assigné des devoirs)
         $teachers = collect([]);
         if ($eleve->prof_principal_id) {
             $profPrincipal = DB::table('enseignants')->where('id', $eleve->prof_principal_id)->select('id', 'prenom', 'nom', 'matiere')->first();
@@ -71,7 +70,22 @@ class EleveDashboardController extends Controller
                 $teachers->push($profPrincipal);
             }
         }
+
+        // Professeurs assignés via la table pivot classe_enseignant
+        $assignedTeachers = DB::table('classe_enseignant')
+            ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+            ->where('classe_enseignant.classe_id', $eleve->classe_id)
+            ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom', 'enseignants.matiere')
+            ->get();
+
+        foreach ($assignedTeachers as $t) {
+            if ($t->id != $eleve->prof_principal_id) {
+                $t->is_principal = false;
+                $teachers->push($t);
+            }
+        }
         
+        // Autres professeurs ayant donné des devoirs (fallback)
         $otherTeachersIds = DB::table('devoirs')
             ->where('classe_id', $eleve->classe_id)
             ->whereNotNull('enseignant_id')
@@ -79,7 +93,7 @@ class EleveDashboardController extends Controller
             ->unique();
             
         foreach($otherTeachersIds as $teacherId) {
-            if ($teacherId != $eleve->prof_principal_id) {
+            if ($teacherId != $eleve->prof_principal_id && !$teachers->contains('id', $teacherId)) {
                 $t = DB::table('enseignants')->where('id', $teacherId)->select('id', 'prenom', 'nom', 'matiere')->first();
                 if ($t) {
                     $t->is_principal = false;
