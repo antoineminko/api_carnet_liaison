@@ -388,6 +388,7 @@ class MessageController extends Controller
                 'conversations.subject',
                 'enseignants.nom as enseignant_nom',
                 'enseignants.prenom as enseignant_prenom',
+                'enseignants.matiere as enseignant_matiere',
                 'ecoles.nom as admin_name',
                 \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != "parent" AND messages.is_read = false) as unread_count')
             )

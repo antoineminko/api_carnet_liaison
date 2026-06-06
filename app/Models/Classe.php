@@ -24,4 +24,9 @@ class Classe extends Model
     {
         return $this->hasMany(Eleve::class);
     }
+
+    public function enseignants()
+    {
+        return $this->belongsToMany(Enseignant::class, 'classe_enseignant');
+    }
 }

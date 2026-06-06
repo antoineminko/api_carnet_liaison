@@ -31,7 +31,7 @@ class Enseignant extends Model
 
     public function classes()
     {
-        return $this->hasMany(Classe::class, 'prof_principal_id');
+        return $this->belongsToMany(Classe::class, 'classe_enseignant');
     }
 
     public function incidents()

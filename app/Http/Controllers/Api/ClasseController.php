@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Classe;
 
 class ClasseController extends Controller
 {
@@ -21,6 +22,15 @@ class ClasseController extends Controller
                     DB::raw("CONCAT(enseignants.prenom, ' ', enseignants.nom) as prof_principal_nom")
                 )
                 ->get();
+                
+            foreach ($classes as $classe) {
+                $classe->enseignants = DB::table('classe_enseignant')
+                    ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                    ->where('classe_enseignant.classe_id', $classe->id)
+                    ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom')
+                    ->get();
+            }
+
             return response()->json($classes);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -30,13 +40,11 @@ class ClasseController extends Controller
     public function store(Request $request)
     {
         try {
-            // Auto-générer le code de la classe à partir du nom (ex: "6ème A" → "6EA")
             $code = $request->input('code');
             if (!$code) {
                 $nom = $request->input('nom', '');
                 $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $nom));
                 $code = substr($code, 0, 5);
-                // S'assurer de l'unicité
                 $suffix = 1;
                 $baseCode = $code;
                 while (DB::table('classes')->where('code', $code)->exists()) {
@@ -45,7 +53,6 @@ class ClasseController extends Controller
                 }
             }
 
-            // Si pas d'ecole_id, prendre la première école
             $ecoleId = $request->input('ecole_id');
             if (!$ecoleId) {
                 $ecole = DB::table('ecoles')->first();
@@ -61,6 +68,11 @@ class ClasseController extends Controller
                 'updated_at' => now(),
             ]);
 
+            $classeModel = Classe::find($id);
+            if ($request->has('enseignant_ids')) {
+                $classeModel->enseignants()->sync($request->input('enseignant_ids', []));
+            }
+
             $classe = DB::table('classes')
                 ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
                 ->leftJoin('enseignants', 'classes.prof_principal_id', '=', 'enseignants.id')
@@ -71,12 +83,19 @@ class ClasseController extends Controller
                 )
                 ->where('classes.id', $id)
                 ->first();
+                
+            $classe->enseignants = DB::table('classe_enseignant')
+                ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                ->where('classe_enseignant.classe_id', $classe->id)
+                ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom')
+                ->get();
 
             return response()->json($classe, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
     public function update(Request $request, $id)
     {
         try {
@@ -85,6 +104,12 @@ class ClasseController extends Controller
                 'prof_principal_id' => $request->input('prof_principal_id'),
                 'updated_at' => now(),
             ]);
+            
+            $classeModel = Classe::find($id);
+            if ($request->has('enseignant_ids')) {
+                $classeModel->enseignants()->sync($request->input('enseignant_ids', []));
+            }
+
             $classe = DB::table('classes')
                 ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
                 ->leftJoin('enseignants', 'classes.prof_principal_id', '=', 'enseignants.id')
@@ -95,6 +120,13 @@ class ClasseController extends Controller
                 )
                 ->where('classes.id', $id)
                 ->first();
+                
+            $classe->enseignants = DB::table('classe_enseignant')
+                ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                ->where('classe_enseignant.classe_id', $classe->id)
+                ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom')
+                ->get();
+                
             return response()->json($classe);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
