@@ -11,14 +11,16 @@ class ParentController extends Controller
     public function index()
     {
         try {
-            $parents = DB::table('parent_users')
-                ->leftJoin('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
-                ->select(
-                    'parent_users.*',
-                    'eleve_parents.eleve_id',
-                    DB::raw('(SELECT COUNT(*) FROM eleve_parents ep WHERE ep.parent_id = parent_users.id) as nb_enfants')
-                )
-                ->get();
+            $parents = DB::table('parent_users')->get();
+            $eleveParents = DB::table('eleve_parents')->get();
+
+            $parents = $parents->map(function ($parent) use ($eleveParents) {
+                $enfants = $eleveParents->where('parent_id', $parent->id)->values();
+                $parent->nb_enfants = $enfants->count();
+                $parent->enfants = $enfants;
+                return $parent;
+            });
+
             return response()->json($parents);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -28,6 +30,13 @@ class ParentController extends Controller
     public function store(Request $request)
     {
         try {
+            if ($request->input('eleve_id')) {
+                $count = DB::table('eleve_parents')->where('eleve_id', $request->input('eleve_id'))->count();
+                if ($count >= 3) {
+                    return response()->json(['error' => 'Cet élève a déjà le nombre maximum de 3 parents/tuteurs.'], 400);
+                }
+            }
+
             $email = $request->input('email');
             if (empty($email)) {
                 $email = 'parent_' . time() . '_' . rand(1000, 9999) . '@carnet.local';
@@ -47,13 +56,17 @@ class ParentController extends Controller
                 DB::table('eleve_parents')->insert([
                     'eleve_id' => $request->input('eleve_id'),
                     'parent_id' => $id,
-                    'relation' => 'Parent',
+                    'relation' => $request->input('relation', 'Tuteur'),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
             }
 
             $parent = DB::table('parent_users')->where('id', $id)->first();
+            $enfants = DB::table('eleve_parents')->where('parent_id', $id)->get();
+            $parent->nb_enfants = $enfants->count();
+            $parent->enfants = $enfants;
+            
             return response()->json($parent, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -112,27 +125,34 @@ class ParentController extends Controller
             ]);
 
             if ($request->has('eleve_id')) {
+                $eleve_id = $request->input('eleve_id');
+                if ($eleve_id) {
+                    $count = DB::table('eleve_parents')
+                        ->where('eleve_id', $eleve_id)
+                        ->where('parent_id', '!=', $id)
+                        ->count();
+                    if ($count >= 3) {
+                        return response()->json(['error' => 'Cet élève a déjà le nombre maximum de 3 parents/tuteurs.'], 400);
+                    }
+                }
+
                 DB::table('eleve_parents')->where('parent_id', $id)->delete();
-                if ($request->input('eleve_id')) {
+                if ($eleve_id) {
                     DB::table('eleve_parents')->insert([
-                        'eleve_id' => $request->input('eleve_id'),
+                        'eleve_id' => $eleve_id,
                         'parent_id' => $id,
-                        'relation' => 'Parent',
+                        'relation' => $request->input('relation', 'Tuteur'),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
                 }
             }
 
-            $parent = DB::table('parent_users')
-                ->leftJoin('eleve_parents', 'parent_users.id', '=', 'eleve_parents.parent_id')
-                ->select(
-                    'parent_users.*',
-                    'eleve_parents.eleve_id',
-                    DB::raw('(SELECT COUNT(*) FROM eleve_parents ep WHERE ep.parent_id = parent_users.id) as nb_enfants')
-                )
-                ->where('parent_users.id', $id)
-                ->first();
+            $parent = DB::table('parent_users')->where('id', $id)->first();
+            $enfants = DB::table('eleve_parents')->where('parent_id', $id)->get();
+            $parent->nb_enfants = $enfants->count();
+            $parent->enfants = $enfants;
+            
             return response()->json($parent);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

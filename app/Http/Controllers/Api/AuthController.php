@@ -78,6 +78,7 @@ class AuthController extends Controller
                 'prenom' => $teacher->prenom,
                 'email' => $teacher->email,
                 'telephone' => $teacher->telephone,
+                'matiere' => $teacher->matiere,
             ],
         ]);
     }

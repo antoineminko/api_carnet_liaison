@@ -73,12 +73,15 @@ class LiaisonController extends Controller
         $request->validate([
             'eleve_ids' => 'required|array',
             'eleve_ids.*' => 'integer',
-            'parent_id' => 'required|integer'
+            'parent_id' => 'required|integer',
+            'relation' => 'nullable|string'
         ]);
 
         $parentId = $request->parent_id;
         $eleveIds = $request->eleve_ids;
+        $relation = $request->input('relation', 'Tuteur');
         $linkedCount = 0;
+        $errors = [];
 
         foreach ($eleveIds as $eleveId) {
             $exists = DB::table('eleve_parents')
@@ -87,10 +90,17 @@ class LiaisonController extends Controller
                 ->exists();
 
             if (!$exists) {
+                // Check max 3 limit
+                $count = DB::table('eleve_parents')->where('eleve_id', $eleveId)->count();
+                if ($count >= 3) {
+                    $errors[] = "L'élève #$eleveId a déjà 3 parents/tuteurs.";
+                    continue;
+                }
+
                 DB::table('eleve_parents')->insert([
                     'eleve_id' => $eleveId,
                     'parent_id' => $parentId,
-                    'relation' => 'Parent',
+                    'relation' => $relation,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -98,10 +108,17 @@ class LiaisonController extends Controller
             }
         }
 
+        if (count($errors) > 0 && $linkedCount == 0) {
+            return response()->json([
+                'success' => false,
+                'error' => implode(' ', $errors)
+            ], 400);
+        }
+
         return response()->json([
             'success' => true,
             'message' => $linkedCount > 0 
-                ? "$linkedCount enfant(s) lié(s) avec succès."
+                ? "$linkedCount enfant(s) lié(s) avec succès." . (count($errors) > 0 ? " (" . implode(' ', $errors) . ")" : "")
                 : "Les enfants sélectionnés sont déjà liés à ce parent."
         ]);
     }
