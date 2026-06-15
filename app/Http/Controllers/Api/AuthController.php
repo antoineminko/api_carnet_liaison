@@ -27,9 +27,10 @@ class AuthController extends Controller
         }
 
         if (!Hash::check($request->password, $parent->password)) {
-            // Optionnel : permettre un mot de passe global fixé "parent123" si souhaité par le client, mais Hash::check est mieux.
             return response()->json(['success' => false, 'message' => 'Mot de passe incorrect'], 401);
         }
+
+        $nb_enfants = \Illuminate\Support\Facades\DB::table('eleve_parents')->where('parent_id', $parent->id)->count();
 
         return response()->json([
             'success' => true,
@@ -40,6 +41,7 @@ class AuthController extends Controller
                 'prenom' => $parent->prenom,
                 'email' => $parent->email,
                 'telephone' => $parent->telephone,
+                'nb_enfants' => $nb_enfants,
             ],
         ]);
     }
