@@ -31,6 +31,8 @@ class AdminMessageController extends Controller
             'parent_id'       => 'nullable|integer',
             'classe_id'       => 'nullable|integer',
             'eleve_id'        => 'nullable|integer',
+            'enseignant_id'   => 'nullable|integer',
+            'tous_enseignants'=> 'nullable|boolean',
             'montant'         => 'nullable|numeric',
             'montant_paye'    => 'nullable|numeric',
             'montant_restant' => 'nullable|numeric',
@@ -39,6 +41,62 @@ class AdminMessageController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
+        }
+
+        // Cas des enseignants
+        $isTeacherMessage = $request->filled('enseignant_id') || $request->tous_enseignants;
+        
+        if ($isTeacherMessage) {
+            $enseignantsList = [];
+            if ($request->tous_enseignants) {
+                // Get all teachers from this school
+                $enseignantsList = DB::table('classe_enseignant')
+                    ->join('classes', 'classe_enseignant.classe_id', '=', 'classes.id')
+                    ->where('classes.ecole_id', $request->ecole_id)
+                    ->pluck('classe_enseignant.enseignant_id')
+                    ->unique()
+                    ->toArray();
+            } else {
+                $enseignantsList = [$request->enseignant_id];
+            }
+
+            if (empty($enseignantsList)) {
+                return response()->json(['error' => 'Aucun enseignant destinataire trouvé.'], 400);
+            }
+
+            $sentCount = 0;
+            foreach ($enseignantsList as $ensId) {
+                $conversation = Conversation::firstOrCreate(
+                    [
+                        'ecole_id'      => $request->ecole_id,
+                        'enseignant_id' => $ensId,
+                        'parent_id'     => null, // Conversation Admin ↔ Enseignant
+                    ],
+                    ['status' => 'accepted']
+                );
+
+                if ($conversation->status !== 'accepted') {
+                    $conversation->update(['status' => 'accepted']);
+                }
+
+                Message::create([
+                    'conversation_id' => $conversation->id,
+                    'sender_type'     => 'admin',
+                    'sender_id'       => $request->ecole_id,
+                    'content'         => $request->content,
+                    'is_read'         => false,
+                ]);
+
+                // Ajouter ici notification Push pour Enseignant si implémenté
+
+                $sentCount++;
+            }
+
+            return response()->json([
+                'success'    => true,
+                'message'    => "Message envoyé à {$sentCount} enseignant(s) avec succès.",
+                'sent_count' => $sentCount,
+            ], 201);
         }
 
         // Récupérer les élèves concernés au lieu de juste les parents, pour les admin_informations
@@ -217,6 +275,103 @@ class AdminMessageController extends Controller
         return response()->json([
             'success'      => true,
             'informations' => $infos,
+        ]);
+    }
+
+    // Récupérer les conversations où l'Admin est impliqué (Admin <-> Parent ou Admin <-> Enseignant)
+    public function getAdminConversations(Request $request)
+    {
+        $ecole_id = $request->query('ecole_id');
+
+        // Admin <-> Parents
+        $parentConversations = DB::table('conversations')
+            ->join('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
+            ->leftJoin('messages', function ($join) {
+                $join->on('messages.conversation_id', '=', 'conversations.id')
+                     ->whereRaw('messages.id = (select max(id) from messages where conversation_id = conversations.id)');
+            })
+            ->whereNull('conversations.enseignant_id')
+            ->where('conversations.ecole_id', $ecole_id)
+            ->select(
+                'conversations.id as conversation_id',
+                'parent_users.nom as interlocuteur_nom',
+                'parent_users.prenom as interlocuteur_prenom',
+                DB::raw("'Parent' as interlocuteur_type"),
+                'messages.content as last_message',
+                'messages.created_at as last_message_date'
+            );
+
+        // Admin <-> Enseignants
+        $enseignantConversations = DB::table('conversations')
+            ->join('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
+            ->leftJoin('messages', function ($join) {
+                $join->on('messages.conversation_id', '=', 'conversations.id')
+                     ->whereRaw('messages.id = (select max(id) from messages where conversation_id = conversations.id)');
+            })
+            ->whereNull('conversations.parent_id')
+            ->where('conversations.ecole_id', $ecole_id)
+            ->select(
+                'conversations.id as conversation_id',
+                'enseignants.nom as interlocuteur_nom',
+                'enseignants.prenom as interlocuteur_prenom',
+                DB::raw("'Enseignant' as interlocuteur_type"),
+                'messages.content as last_message',
+                'messages.created_at as last_message_date'
+            );
+
+        $conversations = $parentConversations->union($enseignantConversations)
+            ->orderBy('last_message_date', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'conversations' => $conversations
+        ]);
+    }
+
+    public function getAdminMessages($conversation_id)
+    {
+        $messages = Message::where('conversation_id', $conversation_id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+            
+        // Marquer les messages entrants comme lus
+        Message::where('conversation_id', $conversation_id)
+            ->where('sender_type', '!=', 'admin')
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        return response()->json([
+            'success' => true,
+            'messages' => $messages
+        ]);
+    }
+
+    public function replyAdminMessage(Request $request, $conversation_id)
+    {
+        $request->validate([
+            'content' => 'required|string',
+            'ecole_id'=> 'required|integer',
+        ]);
+
+        $conversation = Conversation::find($conversation_id);
+        if (!$conversation) {
+            return response()->json(['success' => false, 'message' => 'Conversation introuvable'], 404);
+        }
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_type'     => 'admin',
+            'sender_id'       => $request->ecole_id,
+            'content'         => $request->content,
+            'is_read'         => false,
+        ]);
+
+        // Push notification logic could be added here
+        
+        return response()->json([
+            'success' => true,
+            'message' => $message
         ]);
     }
 }

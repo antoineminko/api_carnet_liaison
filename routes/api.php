@@ -144,7 +144,12 @@ Route::get('/reports/against', [\App\Http\Controllers\Api\ReportController::clas
 Route::get('/reports/eleve/{eleve_id}', [\App\Http\Controllers\Api\ReportController::class, 'getReportsForEleve']);
 
 // Administration Messages
-Route::post('/admin/messages/send', [AdminMessageController::class, 'sendMessageToParent']);
+Route::prefix('admin/messages')->group(function () {
+    Route::post('/send', [AdminMessageController::class, 'sendMessageToParent']);
+    Route::get('/conversations', [AdminMessageController::class, 'getAdminConversations']);
+    Route::get('/conversations/{id}', [AdminMessageController::class, 'getAdminMessages']);
+    Route::post('/conversations/{id}/reply', [AdminMessageController::class, 'replyAdminMessage']);
+});
 Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
 Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 
