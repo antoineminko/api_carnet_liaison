@@ -347,6 +347,19 @@ class AdminMessageController extends Controller
         ]);
     }
 
+    // Récupérer les messages d'une conversation pour la supervision (sans marquer comme lu)
+    public function getMonitoringMessages($conversation_id)
+    {
+        $messages = Message::where('conversation_id', $conversation_id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'messages' => $messages
+        ]);
+    }
+
     public function replyAdminMessage(Request $request, $conversation_id)
     {
         $request->validate([

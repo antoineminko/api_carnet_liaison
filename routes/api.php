@@ -151,6 +151,7 @@ Route::prefix('admin/messages')->group(function () {
     Route::post('/conversations/{id}/reply', [AdminMessageController::class, 'replyAdminMessage']);
 });
 Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
+Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
 Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 
 // Protected routes
