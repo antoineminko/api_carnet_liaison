@@ -42,6 +42,12 @@ class LiaisonController extends Controller
             ->exists();
 
         if ($exists) {
+            // METTRE A JOUR is_verified !
+            DB::table('eleve_parents')
+                ->where('eleve_id', $eleve->id)
+                ->where('parent_id', $parent->id)
+                ->update(['is_verified' => 1]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Liaison vérifiée avec succès.',
