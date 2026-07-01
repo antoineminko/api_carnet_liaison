@@ -88,6 +88,7 @@ Route::post('/parents', [ParentController::class, 'store']);
 Route::put('/parents/{id}', [ParentController::class, 'update']);
 Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
 Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
+Route::post('/parents/{id}/children/{eleve_id}/verify', [ParentController::class, 'verifyChildAccess']);
 Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 Route::get('/enseignants/{id}/conversations', [MessageController::class, 'getConversationsForTeacher']);

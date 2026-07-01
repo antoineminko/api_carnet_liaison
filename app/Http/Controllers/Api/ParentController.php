@@ -91,6 +91,7 @@ class ParentController extends Controller
                     'ecoles.nom as ecole_nom',
                     'ecoles.code as ecole_code',
                     'eleve_parents.relation',
+                    'eleve_parents.is_verified',
                     'attendances.status as attendance_status',
                     'attendances.created_at as arrival_time'
                 )
@@ -110,6 +111,26 @@ class ParentController extends Controller
             return response()->json($eleves);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function verifyChildAccess(Request $request, $parentId, $eleveId)
+    {
+        // Validation could be added here if needed (e.g. check a secret code provided in $request)
+        
+        try {
+            $updated = DB::table('eleve_parents')
+                ->where('parent_id', $parentId)
+                ->where('eleve_id', $eleveId)
+                ->update(['is_verified' => true]);
+
+            if ($updated) {
+                return response()->json(['success' => true, 'message' => 'Enfant déverrouillé avec succès.']);
+            } else {
+                return response()->json(['success' => false, 'error' => 'Liaison introuvable ou déjà vérifiée.'], 404);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
