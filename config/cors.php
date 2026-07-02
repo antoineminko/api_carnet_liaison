@@ -20,7 +20,7 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        'https://carnet-liaison.vercel.app',
+        env('FRONTEND_URL', 'https://carnet-liaison.vercel.app'),
         'http://localhost',
         'http://localhost:3000',
         'http://localhost:5173',
