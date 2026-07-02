@@ -119,15 +119,32 @@ class ParentController extends Controller
         // Validation could be added here if needed (e.g. check a secret code provided in $request)
         
         try {
-            $updated = DB::table('eleve_parents')
+            $eleve = DB::table('eleves')->where('id', $eleveId)->first();
+            if (!$eleve) {
+                return response()->json(['success' => false, 'error' => 'Élève introuvable.'], 404);
+            }
+
+            // Vérifier si le code correspond
+            if ($eleve->code_secret !== $request->input('code')) {
+                return response()->json(['success' => false, 'error' => 'Code secret incorrect.'], 400);
+            }
+
+            $liaison = DB::table('eleve_parents')
                 ->where('parent_id', $parentId)
                 ->where('eleve_id', $eleveId)
-                ->update(['is_verified' => true]);
+                ->first();
 
-            if ($updated) {
+            if ($liaison) {
+                // Mettre à jour seulement si ce n'est pas déjà vérifié
+                if (!$liaison->is_verified) {
+                    DB::table('eleve_parents')
+                        ->where('parent_id', $parentId)
+                        ->where('eleve_id', $eleveId)
+                        ->update(['is_verified' => true]);
+                }
                 return response()->json(['success' => true, 'message' => 'Enfant déverrouillé avec succès.']);
             } else {
-                return response()->json(['success' => false, 'error' => 'Liaison introuvable ou déjà vérifiée.'], 404);
+                return response()->json(['success' => false, 'error' => 'Liaison introuvable.'], 404);
             }
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
