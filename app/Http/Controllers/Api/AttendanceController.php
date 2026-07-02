@@ -50,24 +50,35 @@ class AttendanceController extends Controller
                 $eleve = Eleve::find($eleveId);
                 
                 if ($eleve) {
+                    // Récupérer le nom de l'école via la classe
+                    $ecoleNom = DB::table('classes')
+                        ->join('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                        ->where('classes.id', $classeId)
+                        ->value('ecoles.nom');
+
                     // Find parents via eleve_parents table
                     $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
                     
                     foreach ($parentLinks as $parentLink) {
                         $parent = ParentUser::find($parentLink->parent_id);
                         if ($parent && !empty($parent->fcm_token)) {
-                            $title = "Alerte de présence - " . $eleve->prenom;
+                            $prenomNom = trim($eleve->prenom . ' ' . $eleve->nom);
                             $statusFr = 'présent';
                             if ($status === 'absent') $statusFr = 'absent';
                             if ($status === 'late') $statusFr = 'en retard';
-                            
-                            $body = "Votre enfant {$eleve->prenom} {$eleve->nom} a été marqué $statusFr aujourd'hui.";
+
+                            // Titre avec nom de l'élève
+                            $title = "{$prenomNom} - Appel de présence";
+                            // Corps avec nom de l'école si disponible
+                            $ecoleStr = $ecoleNom ? " ({$ecoleNom})" : '';
+                            $body = "{$prenomNom} a été marqué {$statusFr} aujourd'hui{$ecoleStr}.";
                                 
                             try {
                                 $notificationService = app(PushNotificationService::class);
                                 $notificationService->sendToToken($parent->fcm_token, $title, $body, [
                                     'eleve_id'   => (string)$eleveId,
-                                    'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
+                                    'child_name' => $prenomNom,
+                                    'ecole_nom'  => $ecoleNom ?? '',
                                     'type'       => 'attendance_alert',
                                     'status'     => (string)$status,
                                 ]);

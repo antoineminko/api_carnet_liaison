@@ -114,6 +114,8 @@ Route::get('/enseignants/student/{studentId}/info', [EnseignantDashboardControll
 Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);
 Route::get('/users/{role}/{user_id}/notifications', [NotificationController::class, 'index']);
 Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::class, 'markAllReadForChild']);
+
 
 // Messagerie
 Route::get('/messages/conversation', [MessageController::class, 'getConversation']);

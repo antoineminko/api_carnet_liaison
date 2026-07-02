@@ -76,5 +76,41 @@ class NotificationController extends Controller
 
         return response()->json(['success' => true]);
     }
+
+    /**
+     * Marquer toutes les notifications d'un élève comme lues
+     * Appelé quand le parent clique sur la carte d'un enfant
+     */
+    public function markAllReadForChild(Request $request, $eleveId)
+    {
+        $parentId = $request->input('parent_id');
+
+        // Marquer toutes les admin_informations de cet élève comme lues
+        \Illuminate\Support\Facades\DB::table('admin_informations')
+            ->where('eleve_id', $eleveId)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        // Marquer aussi les notifications API liées à cet élève comme lues
+        if ($parentId) {
+            $notifications = \App\Models\Notification::where('user_type', 'parent')
+                ->where('user_id', $parentId)
+                ->where('is_read', false)
+                ->get();
+
+            foreach ($notifications as $notif) {
+                $data = is_string($notif->data)
+                    ? json_decode($notif->data, true)
+                    : (array) $notif->data;
+                $notifEleveId = $data['eleve_id'] ?? null;
+                if ($notifEleveId && (string)$notifEleveId === (string)$eleveId) {
+                    $notif->is_read = true;
+                    $notif->save();
+                }
+            }
+        }
+
+        return response()->json(['success' => true]);
+    }
 }
 
