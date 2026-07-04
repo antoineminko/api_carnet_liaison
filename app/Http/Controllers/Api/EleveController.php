@@ -41,6 +41,22 @@ class EleveController extends Controller
                 $classeId = $classe ? $classe->id : null;
             }
 
+            if (!$classeId) {
+                // If still no classe_id, check if 'Non assigné' exists, else create it
+                $defaultClass = DB::table('classes')->where('nom', 'Non assigné')->first();
+                if ($defaultClass) {
+                    $classeId = $defaultClass->id;
+                } else {
+                    $classeId = DB::table('classes')->insertGetId([
+                        'nom' => 'Non assigné',
+                        'ecole_id' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
+            }
+
+
             // Générer matricule automatique
             $matricule = $request->input('matricule', 'MAT-' . strtoupper(uniqid()));
 
@@ -54,7 +70,7 @@ class EleveController extends Controller
                 'nom'            => $request->input('nom'),
                 'prenom'         => $request->input('prenom'),
                 'matricule'      => $matricule,
-                'classe_id'      => $classeId ?? 1,
+                'classe_id'      => $classeId,
                 'code_secret'    => $request->input('code_secret'),
                 'date_naissance' => $request->input('date_naissance'),
                 'lieu_naissance' => $request->input('lieu_naissance'),
