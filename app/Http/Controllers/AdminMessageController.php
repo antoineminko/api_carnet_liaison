@@ -29,7 +29,8 @@ class AdminMessageController extends Controller
             'type'            => 'required|string',
             'content'         => 'required|string',
             'parent_id'       => 'nullable|integer',
-            'classe_id'       => 'nullable|integer',
+            'classe_id'       => 'nullable',
+            'niveaux'         => 'nullable|array',
             'eleve_id'        => 'nullable|integer',
             'enseignant_id'   => 'nullable|integer',
             'tous_enseignants'=> 'nullable|boolean',
@@ -37,10 +38,20 @@ class AdminMessageController extends Controller
             'montant_paye'    => 'nullable|numeric',
             'montant_restant' => 'nullable|numeric',
             'titre'           => 'nullable|string',
+            'fichier'         => 'nullable|file|max:10240',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
+        }
+
+        $content = $request->content;
+
+        if ($request->hasFile('fichier')) {
+            $path = $request->file('fichier')->store('communications', 'public');
+            $fileUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
+            
+            $content .= "\n\nPièce jointe : " . $fileUrl;
         }
 
         // Cas des enseignants
@@ -83,7 +94,7 @@ class AdminMessageController extends Controller
                     'conversation_id' => $conversation->id,
                     'sender_type'     => 'admin',
                     'sender_id'       => $request->ecole_id,
-                    'content'         => $request->content,
+                    'content'         => $content,
                     'is_read'         => false,
                 ]);
 
@@ -102,12 +113,25 @@ class AdminMessageController extends Controller
         // Récupérer les élèves concernés au lieu de juste les parents, pour les admin_informations
         $elevesList = [];
 
-        // Cas 1 : Envoi à une classe entière
-        if ($request->filled('classe_id')) {
-            $elevesList = DB::table('eleves')
-                ->where('classe_id', $request->classe_id)
-                ->pluck('id')
-                ->toArray();
+        // Cas 1 : Envoi à une classe entière ou plusieurs classes, ou par niveaux
+        if ($request->filled('classe_id') || $request->filled('niveaux')) {
+            $query = DB::table('eleves')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('classes.ecole_id', $request->ecole_id);
+            
+            $query->where(function($q) use ($request) {
+                if ($request->filled('classe_id')) {
+                    // classe_id peut être un int ou un array (ex: [1, 2])
+                    $classes = is_array($request->classe_id) ? $request->classe_id : explode(',', $request->classe_id);
+                    $q->whereIn('classe_id', $classes);
+                }
+                if ($request->filled('niveaux')) {
+                    $niveaux = is_array($request->niveaux) ? $request->niveaux : explode(',', $request->niveaux);
+                    $q->orWhereIn('classes.niveau', $niveaux);
+                }
+            });
+
+            $elevesList = $query->pluck('eleves.id')->unique()->toArray();
         }
         // Cas 2 : Envoi à un élève spécifique
         elseif ($request->filled('eleve_id')) {
@@ -148,7 +172,7 @@ class AdminMessageController extends Controller
                     'eleve_id'        => $eleveId,
                     'type'            => $request->type,
                     'titre'           => $request->titre ?? 'Information Administration',
-                    'contenu'         => $request->content,
+                    'contenu'         => $content,
                     'montant'         => $request->montant,
                     'montant_paye'    => $request->montant_paye,
                     'montant_restant' => $request->montant_restant,
@@ -184,7 +208,7 @@ class AdminMessageController extends Controller
                         'conversation_id' => $conversation->id,
                         'sender_type'     => 'admin',
                         'sender_id'       => $request->ecole_id,
-                        'content'         => $request->content,
+                        'content'         => $content,
                         'is_read'         => false,
                     ]);
                 }
@@ -195,7 +219,7 @@ class AdminMessageController extends Controller
                     
                     if ($parent && !empty($parent->fcm_token)) {
                         $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
-                        $body  = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
+                        $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
 
                         $notificationData = [
                             'type' => $request->type === 'textual' ? 'admin_message' : 'admin_info',
