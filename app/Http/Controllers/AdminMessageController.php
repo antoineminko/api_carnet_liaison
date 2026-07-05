@@ -46,13 +46,28 @@ class AdminMessageController extends Controller
         }
 
         $content = $request->content;
+        $fichierUrl = null;
 
         if ($request->hasFile('fichier')) {
             $path = $request->file('fichier')->store('communications', 'public');
-            $fileUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
-            
-            $content .= "\n\nPièce jointe : " . $fileUrl;
+            $fichierUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
         }
+
+        // Enregistrer le broadcast global
+        $cibles = [];
+        if ($request->filled('tous_enseignants')) $cibles['tous_enseignants'] = true;
+        if ($request->filled('classe_id')) $cibles['classe_id'] = is_array($request->classe_id) ? $request->classe_id : explode(',', $request->classe_id);
+        if ($request->filled('niveaux')) $cibles['niveaux'] = is_array($request->niveaux) ? $request->niveaux : explode(',', $request->niveaux);
+        if ($request->filled('eleve_id')) $cibles['eleve_id'] = $request->eleve_id;
+
+        \App\Models\AdminBroadcast::create([
+            'ecole_id' => $request->ecole_id,
+            'type' => $request->type ?? 'textual',
+            'titre' => $request->titre ?? 'Information Administration',
+            'contenu' => $content,
+            'fichier_url' => $fichierUrl,
+            'cibles' => $cibles,
+        ]);
 
         // Cas des enseignants
         $isTeacherMessage = $request->filled('enseignant_id') || $request->tous_enseignants;
@@ -95,6 +110,7 @@ class AdminMessageController extends Controller
                     'sender_type'     => 'admin',
                     'sender_id'       => $request->ecole_id,
                     'content'         => $content,
+                    'fichier_url'     => $fichierUrl,
                     'is_read'         => false,
                 ]);
 
@@ -179,6 +195,7 @@ class AdminMessageController extends Controller
                     'type'            => $request->type,
                     'titre'           => $request->titre ?? 'Information Administration',
                     'contenu'         => $content,
+                    'fichier_url'     => $fichierUrl,
                     'montant'         => $request->montant,
                     'montant_paye'    => $request->montant_paye,
                     'montant_restant' => $request->montant_restant,
@@ -215,6 +232,7 @@ class AdminMessageController extends Controller
                         'sender_type'     => 'admin',
                         'sender_id'       => $request->ecole_id,
                         'content'         => $content,
+                        'fichier_url'     => $fichierUrl,
                         'is_read'         => false,
                     ]);
                 }
@@ -377,7 +395,6 @@ class AdminMessageController extends Controller
         ]);
     }
 
-    // Récupérer les messages d'une conversation pour la supervision (sans marquer comme lu)
     public function getMonitoringMessages($conversation_id)
     {
         $messages = Message::where('conversation_id', $conversation_id)

@@ -35,6 +35,7 @@ Route::post('/ecoles', [EcoleController::class, 'store']);
 
 // Classes
 Route::get('/classes', [ClasseController::class, 'index']);
+Route::get('/classes/{id}/announcements', [ClasseController::class, 'getAnnouncements']);
 Route::post('/classes', [ClasseController::class, 'store']);
 Route::put('/classes/{id}', [ClasseController::class, 'update']);
 Route::delete('/classes/{id}', [ClasseController::class, 'destroy']);

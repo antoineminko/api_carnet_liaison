@@ -142,4 +142,65 @@ class ClasseController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function getAnnouncements($id)
+    {
+        try {
+            $classe = DB::table('classes')->where('id', $id)->first();
+            if (!$classe) {
+                return response()->json(['error' => 'Classe introuvable'], 404);
+            }
+
+            // Récupérer le niveau (première partie du nom ou champ niveau)
+            $niveau = null;
+            if (isset($classe->nom)) {
+                $parts = explode(' ', $classe->nom);
+                $niveau = $parts[0];
+            }
+
+            $broadcasts = \App\Models\AdminBroadcast::where('ecole_id', $classe->ecole_id)
+                ->get()
+                ->filter(function ($broadcast) use ($id, $niveau) {
+                    $cibles = is_string($broadcast->cibles) ? json_decode($broadcast->cibles, true) : $broadcast->cibles;
+                    if (!$cibles) return false;
+
+                    // Si envoyé à cette classe spécifiquement
+                    if (isset($cibles['classe_id'])) {
+                        $classes = is_array($cibles['classe_id']) ? $cibles['classe_id'] : [$cibles['classe_id']];
+                        if (in_array($id, $classes) || in_array((string)$id, $classes)) {
+                            return true;
+                        }
+                    }
+
+                    // Si envoyé au niveau de cette classe
+                    if (isset($cibles['niveaux']) && $niveau) {
+                        $niveaux = is_array($cibles['niveaux']) ? $cibles['niveaux'] : [$cibles['niveaux']];
+                        foreach ($niveaux as $n) {
+                            if (strpos($classe->nom, $n) === 0) {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                })
+                ->map(function ($broadcast) {
+                    return [
+                        'id' => $broadcast->id,
+                        'type' => $broadcast->type,
+                        'titre' => $broadcast->titre,
+                        'contenu' => $broadcast->contenu,
+                        'fichier_url' => $broadcast->fichier_url,
+                        'created_at' => $broadcast->created_at,
+                        'cibles' => $broadcast->cibles,
+                    ];
+                })
+                ->sortByDesc('created_at')
+                ->values();
+
+            return response()->json($broadcasts);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }
