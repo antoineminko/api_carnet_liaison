@@ -164,6 +164,10 @@ class ClasseController extends Controller
                     $cibles = is_string($broadcast->cibles) ? json_decode($broadcast->cibles, true) : $broadcast->cibles;
                     if (!$cibles) return false;
 
+                    if (isset($cibles['tous_etablissement']) && $cibles['tous_etablissement']) {
+                        return true;
+                    }
+
                     // Si envoyé à cette classe spécifiquement
                     if (isset($cibles['classe_id'])) {
                         $classes = is_array($cibles['classe_id']) ? $cibles['classe_id'] : [$cibles['classe_id']];

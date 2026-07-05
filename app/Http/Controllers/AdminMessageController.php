@@ -55,6 +55,7 @@ class AdminMessageController extends Controller
 
         // Enregistrer le broadcast global
         $cibles = [];
+        if ($request->filled('tous_etablissement')) $cibles['tous_etablissement'] = true;
         if ($request->filled('tous_enseignants')) $cibles['tous_enseignants'] = true;
         if ($request->filled('classe_id')) $cibles['classe_id'] = is_array($request->classe_id) ? $request->classe_id : explode(',', $request->classe_id);
         if ($request->filled('niveaux')) $cibles['niveaux'] = is_array($request->niveaux) ? $request->niveaux : explode(',', $request->niveaux);
