@@ -127,7 +127,13 @@ class AdminMessageController extends Controller
                 }
                 if ($request->filled('niveaux')) {
                     $niveaux = is_array($request->niveaux) ? $request->niveaux : explode(',', $request->niveaux);
-                    $q->orWhereIn('classes.niveau', $niveaux);
+                    $q->orWhere(function($subQ) use ($niveaux) {
+                        foreach ($niveaux as $niveau) {
+                            $subQ->orWhere('classes.nom', 'LIKE', $niveau . ' %')
+                                 ->orWhere('classes.nom', 'LIKE', $niveau . '-%')
+                                 ->orWhere('classes.nom', $niveau);
+                        }
+                    });
                 }
             });
 
