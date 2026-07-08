@@ -118,7 +118,7 @@ class MessageController extends Controller
 
                 if ($parent && !empty($parent->fcm_token) && $enseignant) {
                     $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
-                    $title = "💬 Nouveau message de {$enseignantName}";
+                    $title = " Nouveau message de {$enseignantName}";
                     $body = substr($messageContent, 0, 100) . (strlen($messageContent) > 100 ? '...' : '');
 
                     $this->notificationService->sendAndSave(

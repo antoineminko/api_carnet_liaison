@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\EnseignantDashboardController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\DevoirController;
+use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\MessageController;
@@ -74,6 +75,9 @@ Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
 Route::post('/devoirs', [DevoirController::class, 'store']);
 Route::get('/enseignants/{teacherId}/classes', [DevoirController::class, 'getTeacherClasses']);
 Route::get('/classes/{classeId}/eleves-devoirs', [DevoirController::class, 'getClassStudents']);
+
+// Notes
+Route::post('/notes', [NoteController::class, 'store']);
 
 // Rendez-vous
 Route::post('/appointments', [AppointmentController::class, 'store']);
