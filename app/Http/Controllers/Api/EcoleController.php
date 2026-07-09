@@ -81,18 +81,26 @@ class EcoleController extends Controller
     {
         $ecole = Ecole::findOrFail($id);
 
-        $ecole->update(array_filter([
-            'nom'            => $request->input('nom'),
-            'annee_scolaire' => $request->input('annee_scolaire'),
-            'ville'          => $request->input('ville'),
-            'description'    => $request->input('description'),
-            'logo'           => $request->input('logo'),
-            'image_fond'     => $request->input('image_fond'),
-            'email_admin'    => $request->input('email_admin'),
-            'password_admin' => $request->filled('password_admin')
-                ? Hash::make($request->password_admin)
-                : null,
-        ], fn ($v) => $v !== null));
+        // Build payload explicitly — array_filter would incorrectly drop 0 values
+        $payload = [];
+
+        if ($request->has('nom'))            $payload['nom']            = $request->nom;
+        if ($request->has('annee_scolaire')) $payload['annee_scolaire'] = $request->annee_scolaire;
+        if ($request->has('ville'))          $payload['ville']          = $request->ville;
+        if ($request->has('description'))    $payload['description']    = $request->description;
+        if ($request->has('logo'))           $payload['logo']           = $request->logo;
+        if ($request->has('image_fond'))     $payload['image_fond']     = $request->image_fond;
+        if ($request->has('email_admin'))    $payload['email_admin']    = $request->email_admin;
+        if ($request->has('nb_classes'))     $payload['nb_classes']     = (int) $request->nb_classes;
+        if ($request->has('nb_profs'))       $payload['nb_profs']       = (int) $request->nb_profs;
+        if ($request->has('nb_eleves'))      $payload['nb_eleves']      = (int) $request->nb_eleves;
+
+        if ($request->filled('password_admin')) {
+            $payload['password_admin'] = Hash::make($request->password_admin);
+        }
+
+        $ecole->update($payload);
+        $ecole->refresh();
 
         return response()->json($ecole);
     }
