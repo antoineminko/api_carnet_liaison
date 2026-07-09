@@ -21,18 +21,24 @@ use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\AdminMessageController;
 
-// Auth
-Route::post('/login/parent', [AuthController::class, 'loginParent']);
-Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
+// Auth — routes publiques (pas de middleware school)
+Route::post('/login/parent', [AuthController::class, 'loginParent'])->middleware('school');
+Route::post('/login/teacher', [AuthController::class, 'loginTeacher'])->middleware('school');
+Route::post('/login/admin', [AuthController::class, 'loginAdmin']); // pas de school header requis car le mail est unique
+Route::post('/logout', [AuthController::class, 'logout']);
 
 // Liaison
 Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
 Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
 Route::post('/admin/parents/link-child', [LiaisonController::class, 'adminLinkChild']);
 
-// Ecoles
+// Ecoles — routes publiques (aucun middleware school requis)
 Route::get('/ecoles', [EcoleController::class, 'index']);
+Route::get('/ecoles/search', [EcoleController::class, 'search']);
+Route::get('/ecoles/{code}/profile', [EcoleController::class, 'publicProfile']);
 Route::post('/ecoles', [EcoleController::class, 'store']);
+Route::put('/ecoles/{id}', [EcoleController::class, 'update']);
+Route::delete('/ecoles/{id}', [EcoleController::class, 'destroy']);
 
 // Classes
 Route::get('/classes', [ClasseController::class, 'index']);
@@ -155,6 +161,7 @@ Route::get('/reports/eleve/{eleve_id}', [\App\Http\Controllers\Api\ReportControl
 Route::prefix('admin/messages')->group(function () {
     Route::post('/send', [AdminMessageController::class, 'sendMessageToParent']);
     Route::get('/conversations', [AdminMessageController::class, 'getAdminConversations']);
+    Route::get('/broadcasts', [AdminMessageController::class, 'getAdminBroadcasts']);
     Route::get('/conversations/{id}', [AdminMessageController::class, 'getAdminMessages']);
     Route::post('/conversations/{id}/reply', [AdminMessageController::class, 'replyAdminMessage']);
 });

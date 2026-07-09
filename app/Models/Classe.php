@@ -9,24 +9,26 @@ class Classe extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
-        'nom',
-        'code',
-        'ecole_id',
-    ];
+    protected $fillable = ['nom', 'code', 'ecole_id', 'prof_principal_id'];
 
     public function ecole()
     {
         return $this->belongsTo(Ecole::class);
     }
 
-    public function eleves()
+    public function profPrincipal()
     {
-        return $this->hasMany(Eleve::class);
+        return $this->belongsTo(Enseignant::class, 'prof_principal_id');
     }
 
     public function enseignants()
     {
-        return $this->belongsToMany(Enseignant::class, 'classe_enseignant');
+        return $this->belongsToMany(Enseignant::class, 'classe_enseignant')
+            ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom', 'enseignants.matiere');
+    }
+
+    public function eleves()
+    {
+        return $this->hasMany(Eleve::class);
     }
 }

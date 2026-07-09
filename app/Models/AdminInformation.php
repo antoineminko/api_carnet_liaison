@@ -17,6 +17,7 @@ class AdminInformation extends Model
         'titre',
         'contenu',
         'montant',
+        'fichier_url',
         'is_read',
     ];
 

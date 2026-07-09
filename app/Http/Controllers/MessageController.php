@@ -373,15 +373,18 @@ class MessageController extends Controller
         return response()->json($message, 201);
     }
 
-    // Obtenir toutes les conversations pour un parent
     public function getConversationsForParent($parent_id)
     {
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
             ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
+            ->leftJoin('eleve_parents', 'conversations.parent_id', '=', 'eleve_parents.parent_id')
+            ->leftJoin('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
             ->where('conversations.parent_id', $parent_id)
             ->select(
                 'conversations.id as conversation_id',
+                'conversations.id',
                 'conversations.ecole_id',
                 'conversations.enseignant_id',
                 'conversations.status',
@@ -390,29 +393,22 @@ class MessageController extends Controller
                 'enseignants.prenom as enseignant_prenom',
                 'enseignants.matiere as enseignant_matiere',
                 'ecoles.nom as admin_name',
+                'eleves.nom as eleve_nom',
+                'eleves.prenom as eleve_prenom',
+                'classes.nom as classe_nom',
                 \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != "parent" AND messages.is_read = false) as unread_count')
+            )
+            ->groupBy(
+                'conversations.id', 'conversations.ecole_id', 'conversations.enseignant_id',
+                'conversations.status', 'conversations.subject',
+                'enseignants.nom', 'enseignants.prenom', 'enseignants.matiere',
+                'ecoles.nom', 'eleves.nom', 'eleves.prenom', 'classes.nom'
             )
             ->get();
 
-        // Récupérer le nom de l'élève pour le contexte
-        $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
-            ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-            ->where('eleve_parents.parent_id', $parent_id)
-            ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
-            ->first();
-
-        foreach ($conversations as $conv) {
-            if ($eleve) {
-                $conv->eleve_nom = $eleve->nom;
-                $conv->eleve_prenom = $eleve->prenom;
-                $conv->classe_nom = $eleve->classe_nom;
-            }
-        }
-
         return response()->json([
-            'success' => true,
-            'conversations' => $conversations
+            'success'       => true,
+            'conversations' => $conversations,
         ]);
     }
 

@@ -3,102 +3,75 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\Eleve;
 use Illuminate\Support\Facades\DB;
 
 class EleveDashboardController extends Controller
 {
     public function getDashboard($id)
     {
-        // Récupérer les informations de l'élève
-        $eleve = DB::table('eleves')
-            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-            ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
-            ->where('eleves.id', $id)
-            ->select('eleves.*', 'classes.nom as classe_nom', 'ecoles.nom as ecole_nom', 'ecoles.id as ecole_id', 'classes.prof_principal_id')
-            ->first();
+        $eleve = Eleve::with([
+            'classe.ecole',
+            'classe.profPrincipal',
+            'classe.enseignants',
+        ])->find($id);
 
         if (!$eleve) {
-            return response()->json(['message' => 'Elève non trouvé'], 404);
+            return response()->json(['message' => 'Élève non trouvé'], 404);
         }
 
-        // 1. Présences du jour
+        $classe        = $eleve->classe;
+        $profPrincipal = $classe?->profPrincipal;
+
         $today = date('Y-m-d');
         $attendanceRow = DB::table('attendances')
             ->where('eleve_id', $id)
             ->where('date', $today)
             ->first();
 
-        // Enrichissement pour l'aperçu parent
+        // 1. Présences du jour
         $attendance = null;
         if ($attendanceRow) {
-            $statutFr = 'Présent';
-            if ($attendanceRow->status === 'absent') $statutFr = 'Absent';
-            if ($attendanceRow->status === 'late')  $statutFr = 'En retard';
-
-            $teacherName = null;
-            $matiere = null;
-            if (!empty($eleve->prof_principal_id)) {
-                $t = DB::table('enseignants')
-                    ->where('id', $eleve->prof_principal_id)
-                    ->select('prenom', 'nom', 'matiere')
-                    ->first();
-                if ($t) {
-                    $teacherName = trim(($t->prenom ?? '') . ' ' . ($t->nom ?? ''));
-                    $matiere = $t->matiere ?? null;
-                }
-            }
-
+            $statutFr = match($attendanceRow->status) {
+                'absent' => 'Absent',
+                'late'   => 'En retard',
+                default  => 'Présent',
+            };
             $ts = $attendanceRow->updated_at ?? $attendanceRow->created_at ?? null;
-            $heureArrivee = $ts ? date('H:i', strtotime($ts)) : null;
-
             $attendance = [
-                'statut' => $statutFr,
-                'date' => $attendanceRow->date,
-                'heure_arrivee' => $heureArrivee,
-                'matiere' => $matiere,
-                'enseignant_nom' => $teacherName,
+                'statut'        => $statutFr,
+                'date'          => $attendanceRow->date,
+                'heure_arrivee' => $ts ? date('H:i', strtotime($ts)) : null,
+                'matiere'       => $profPrincipal?->matiere,
+                'enseignant_nom'=> $profPrincipal
+                    ? trim($profPrincipal->prenom . ' ' . $profPrincipal->nom)
+                    : null,
             ];
         }
 
-        // 2. Professeurs de l'élève
-        $teachers = collect([]);
-        if ($eleve->prof_principal_id) {
-            $profPrincipal = DB::table('enseignants')->where('id', $eleve->prof_principal_id)->select('id', 'prenom', 'nom', 'matiere')->first();
-            if ($profPrincipal) {
-                $profPrincipal->is_principal = true;
-                $teachers->push($profPrincipal);
-            }
+        // 2. Professeurs de l'élève — déjà chargés via eager loading (0 requête supplémentaire)
+        $principalId = $classe?->prof_principal_id;
+        $teachers = collect();
+
+        if ($profPrincipal) {
+            $teachers->push([
+                'id'          => $profPrincipal->id,
+                'prenom'      => $profPrincipal->prenom,
+                'nom'         => $profPrincipal->nom,
+                'matiere'     => $profPrincipal->matiere,
+                'is_principal'=> true,
+            ]);
         }
 
-        // Professeurs assignés via la table pivot classe_enseignant
-        $assignedTeachers = DB::table('classe_enseignant')
-            ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
-            ->where('classe_enseignant.classe_id', $eleve->classe_id)
-            ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom', 'enseignants.matiere')
-            ->get();
-
-        foreach ($assignedTeachers as $t) {
-            if ($t->id != $eleve->prof_principal_id) {
-                $t->is_principal = false;
-                $teachers->push($t);
-            }
-        }
-        
-        // Autres professeurs ayant donné des devoirs (fallback)
-        $otherTeachersIds = DB::table('devoirs')
-            ->where('classe_id', $eleve->classe_id)
-            ->whereNotNull('enseignant_id')
-            ->pluck('enseignant_id')
-            ->unique();
-            
-        foreach($otherTeachersIds as $teacherId) {
-            if ($teacherId != $eleve->prof_principal_id && !$teachers->contains('id', $teacherId)) {
-                $t = DB::table('enseignants')->where('id', $teacherId)->select('id', 'prenom', 'nom', 'matiere')->first();
-                if ($t) {
-                    $t->is_principal = false;
-                    $teachers->push($t);
-                }
+        foreach ($classe?->enseignants ?? [] as $t) {
+            if ($t->id != $principalId) {
+                $teachers->push([
+                    'id'          => $t->id,
+                    'prenom'      => $t->prenom,
+                    'nom'         => $t->nom,
+                    'matiere'     => $t->matiere,
+                    'is_principal'=> false,
+                ]);
             }
         }
 
@@ -167,33 +140,21 @@ class EleveDashboardController extends Controller
         ];
 
         // 6. Informations administratives & Finances
-        $dbAdminInfos = DB::table('admin_informations')
-            ->where('eleve_id', $id)
-            ->orderBy('created_at', 'desc')
+        $dbAdminInfos = \App\Models\AdminInformation::where('eleve_id', $id)
+            ->orderByDesc('created_at')
             ->get();
 
-        $adminInfos = [];
-        $totalMontantAdmin = 0;
+        $adminInfos = $dbAdminInfos->map(fn ($info) => [
+            'id'      => $info->id,
+            'titre'   => $info->titre ?? 'Information',
+            'contenu' => $info->contenu,
+            'date'    => $info->created_at,
+            'type'    => $info->type,
+            'montant' => $info->montant,
+            'is_read' => $info->is_read,
+        ])->values()->all();
 
-        foreach ($dbAdminInfos as $info) {
-            $adminInfos[] = [
-                'id'      => $info->id,
-                'titre'   => $info->titre ?? 'Information',
-                'contenu' => $info->contenu,
-                'date'    => $info->created_at,
-                'type'    => $info->type,
-                'montant' => $info->montant,
-                'is_read' => $info->is_read
-            ];
-            
-            if ($info->montant) {
-                $totalMontantAdmin += $info->montant;
-            }
-        }
-
-        // Finances dynamiques - SECTION DÉSACTIVÉE pour l'instant
-        // Pour réactiver, remplacer par la logique dynamique avec admin_informations
-        $finances = null; // Toujours null pour cacher la section "Reste à payer"
+        $finances = null;
 
         // 7. Rendez-vous
         $appointments = DB::table('appointments')
@@ -204,23 +165,24 @@ class EleveDashboardController extends Controller
             ->get();
 
         // 8. Notifications non lues
-        $unread_notifications_count = DB::table('admin_informations')
-            ->where('eleve_id', $id)
-            ->where('is_read', false)
-            ->count();
+        $unread_notifications_count = $dbAdminInfos->where('is_read', false)->count();
 
         return response()->json([
-            'eleve' => $eleve,
-            'attendance' => $attendance,
-            'teachers' => $teachers->unique('id')->values()->all(),
-            'grades' => $grades,
-            'grades_history' => $grades_history,
-            'homeworks' => $homeworks,
-            'actualites' => $actualites,
-            'finances' => $finances,
-            'adminInfos' => $adminInfos,
-            'appointments' => $appointments,
-            'unread_notifications_count' => $unread_notifications_count
+            'eleve'                      => array_merge($eleve->toArray(), [
+                'classe_nom' => $classe?->nom,
+                'ecole_nom'  => $classe?->ecole?->nom,
+                'ecole_id'   => $classe?->ecole_id,
+            ]),
+            'attendance'                 => $attendance,
+            'teachers'                   => $teachers->unique('id')->values()->all(),
+            'grades'                     => [],
+            'grades_history'             => [],
+            'homeworks'                  => $homeworks,
+            'actualites'                 => $actualites,
+            'finances'                   => $finances,
+            'adminInfos'                 => $adminInfos,
+            'appointments'               => $appointments,
+            'unread_notifications_count' => $unread_notifications_count,
         ]);
     }
 }

@@ -3,25 +3,38 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Eleve;
+use App\Models\ParentUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class ParentController extends Controller
 {
     public function index()
     {
         try {
-            $parents = DB::table('parent_users')->get();
-            $eleveParents = DB::table('eleve_parents')->get();
+            $parents = ParentUser::with(['eleves.classe.ecole'])->get();
 
-            $parents = $parents->map(function ($parent) use ($eleveParents) {
-                $enfants = $eleveParents->where('parent_id', $parent->id)->values();
-                $parent->nb_enfants = $enfants->count();
-                $parent->enfants = $enfants;
-                return $parent;
-            });
-
-            return response()->json($parents);
+            return response()->json($parents->map(function ($parent) {
+                return [
+                    'id'         => $parent->id,
+                    'nom'        => $parent->nom,
+                    'prenom'     => $parent->prenom,
+                    'email'      => $parent->email,
+                    'telephone'  => $parent->telephone,
+                    'ecole_id'   => $parent->ecole_id,
+                    'nb_enfants' => $parent->eleves->count(),
+                    'enfants'    => $parent->eleves->map(fn ($e) => [
+                        'id'         => $e->id,
+                        'nom'        => $e->nom,
+                        'prenom'     => $e->prenom,
+                        'classe_nom' => $e->classe?->nom,
+                        'relation'   => $e->pivot?->relation,
+                        'is_verified'=> $e->pivot?->is_verified,
+                    ])->values(),
+                ];
+            })->values());
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -30,213 +43,221 @@ class ParentController extends Controller
     public function store(Request $request)
     {
         try {
+            $ecoleId = $request->input('ecole_id');
+
             if ($request->input('eleve_id')) {
                 $count = DB::table('eleve_parents')->where('eleve_id', $request->input('eleve_id'))->count();
                 if ($count >= 3) {
-                    return response()->json(['error' => 'Cet élève a déjà le nombre maximum de 3 parents/tuteurs.'], 400);
+                    return response()->json(['error' => "Cet élève a déjà le nombre maximum de 3 parents/tuteurs."], 400);
                 }
             }
 
-            $email = $request->input('email');
-            if (empty($email)) {
-                $email = 'parent_' . time() . '_' . rand(1000, 9999) . '@carnet.local';
+            if (!$ecoleId && $request->input('eleve_id')) {
+                $eleve = Eleve::with('classe')->find($request->input('eleve_id'));
+                $ecoleId = $eleve?->classe?->ecole_id;
             }
 
-            $id = DB::table('parent_users')->insertGetId([
-                'nom' => $request->input('nom', 'N/A'),
-                'prenom' => $request->input('prenom', 'N/A'),
-                'email' => $email,
-                'password' => bcrypt('parent123'),
-                'telephone' => $request->input('telephone', null),
-                'created_at' => now(),
-                'updated_at' => now(),
+            $email = $request->input('email') ?: 'parent_' . time() . '_' . rand(1000, 9999) . '@carnet.local';
+
+            $parent = ParentUser::create([
+                'nom'       => $request->input('nom', 'N/A'),
+                'prenom'    => $request->input('prenom', 'N/A'),
+                'email'     => $email,
+                'password'  => Hash::make('parent123'),
+                'telephone' => $request->input('telephone'),
+                'ecole_id'  => $ecoleId,
             ]);
 
             if ($request->input('eleve_id')) {
                 DB::table('eleve_parents')->insert([
-                    'eleve_id' => $request->input('eleve_id'),
-                    'parent_id' => $id,
-                    'relation' => $request->input('relation', 'Tuteur'),
+                    'eleve_id'   => $request->input('eleve_id'),
+                    'parent_id'  => $parent->id,
+                    'relation'   => $request->input('relation', 'Tuteur'),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
             }
 
-            $parent = DB::table('parent_users')->where('id', $id)->first();
-            $enfants = DB::table('eleve_parents')->where('parent_id', $id)->get();
-            $parent->nb_enfants = $enfants->count();
-            $parent->enfants = $enfants;
-            
-            return response()->json($parent, 201);
+            $parent->load('eleves.classe.ecole');
+            $nb_enfants = $parent->eleves->count();
+
+            return response()->json(array_merge($parent->toArray(), [
+                'nb_enfants' => $nb_enfants,
+                'enfants'    => DB::table('eleve_parents')->where('parent_id', $parent->id)->get(),
+            ]), 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function getChildren($id)
+    public function getChildren(int $id)
     {
         try {
-            $eleves = DB::table('eleves')
-                ->join('eleve_parents', 'eleves.id', '=', 'eleve_parents.eleve_id')
-                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-                ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
-                ->leftJoin('attendances', function ($join) {
-                    $join->on('eleves.id', '=', 'attendances.eleve_id')
-                         ->where('attendances.date', '=', date('Y-m-d'));
-                })
-                ->select(
-                    'eleves.*',
-                    'classes.nom as classe_nom',
-                    'classes.code as classe_code',
-                    'ecoles.nom as ecole_nom',
-                    'ecoles.code as ecole_code',
-                    'eleve_parents.relation',
-                    'eleve_parents.is_verified',
-                    'attendances.status as attendance_status',
-                    'attendances.created_at as arrival_time'
-                )
-                ->where('eleve_parents.parent_id', $id)
-                ->get();
+            $parent = ParentUser::findOrFail($id);
+            $today  = date('Y-m-d');
 
-            $eleves = $eleves->map(function($eleve) {
-                $eleve->photo_url = $eleve->photo ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo : null;
-                // Count unread admin infos for this child
-                $eleve->notif_count = \Illuminate\Support\Facades\DB::table('admin_informations')
-                    ->where('eleve_id', $eleve->id)
-                    ->where('is_read', false)
-                    ->count();
-                return $eleve;
-            });
+            $eleves = $parent->eleves()
+                ->with(['classe.ecole'])
+                ->get()
+                ->map(function ($eleve) use ($id, $today) {
+                    $attendance = DB::table('attendances')
+                        ->where('eleve_id', $eleve->id)
+                        ->where('date', $today)
+                        ->first();
 
-            return response()->json($eleves);
+                    $notifCount = DB::table('admin_informations')
+                        ->where('eleve_id', $eleve->id)
+                        ->where('is_read', false)
+                        ->count();
+
+                    $photoUrl = $eleve->photo
+                        ? rtrim(env('APP_URL'), '/') . '/storage/' . $eleve->photo
+                        : null;
+
+                    return [
+                        'id'                => $eleve->id,
+                        'nom'               => $eleve->nom,
+                        'prenom'            => $eleve->prenom,
+                        'matricule'         => $eleve->matricule,
+                        'photo_url'         => $photoUrl,
+                        'classe_id'         => $eleve->classe_id,
+                        'classe_nom'        => $eleve->classe?->nom,
+                        'classe_code'       => $eleve->classe?->code,
+                        'ecole_nom'         => $eleve->classe?->ecole?->nom,
+                        'ecole_code'        => $eleve->classe?->ecole?->code,
+                        'relation'          => $eleve->pivot->relation,
+                        'is_verified'       => $eleve->pivot->is_verified,
+                        'attendance_status' => $attendance?->status,
+                        'arrival_time'      => $attendance?->created_at,
+                        'notif_count'       => $notifCount,
+                    ];
+                });
+
+            return response()->json($eleves->values());
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function verifyChildAccess(Request $request, $parentId, $eleveId)
+    public function verifyChildAccess(Request $request, int $parentId, int $eleveId)
     {
-        // Validation could be added here if needed (e.g. check a secret code provided in $request)
-        
         try {
-            $eleve = DB::table('eleves')->where('id', $eleveId)->first();
+            $eleve = Eleve::find($eleveId);
             if (!$eleve) {
                 return response()->json(['success' => false, 'error' => 'Élève introuvable.'], 404);
             }
 
-            // Vérifier si le code correspond
             if ($eleve->code_secret !== $request->input('code')) {
                 return response()->json(['success' => false, 'error' => 'Code secret incorrect.'], 400);
             }
 
-            $liaison = DB::table('eleve_parents')
+            $updated = DB::table('eleve_parents')
                 ->where('parent_id', $parentId)
                 ->where('eleve_id', $eleveId)
-                ->first();
+                ->update(['is_verified' => true]);
 
-            if ($liaison) {
-                // Mettre à jour seulement si ce n'est pas déjà vérifié
-                if (!$liaison->is_verified) {
-                    DB::table('eleve_parents')
-                        ->where('parent_id', $parentId)
-                        ->where('eleve_id', $eleveId)
-                        ->update(['is_verified' => true]);
-                }
-                return response()->json(['success' => true, 'message' => 'Enfant déverrouillé avec succès.']);
-            } else {
+            if (!$updated) {
                 return response()->json(['success' => false, 'error' => 'Liaison introuvable.'], 404);
             }
+
+            return response()->json(['success' => true, 'message' => 'Enfant déverrouillé avec succès.']);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id)
     {
         try {
-            DB::table('parent_users')->where('id', $id)->update([
-                'nom' => $request->input('nom'),
-                'prenom' => $request->input('prenom'),
-                'email' => $request->input('email'),
+            $parent = ParentUser::findOrFail($id);
+
+            $parent->update(array_filter([
+                'nom'       => $request->input('nom'),
+                'prenom'    => $request->input('prenom'),
+                'email'     => $request->input('email'),
                 'telephone' => $request->input('telephone'),
-                'updated_at' => now(),
-            ]);
+            ], fn ($v) => $v !== null));
 
             if ($request->has('eleve_id')) {
-                $eleve_id = $request->input('eleve_id');
-                if ($eleve_id) {
-                    $count = DB::table('eleve_parents')
-                        ->where('eleve_id', $eleve_id)
-                        ->where('parent_id', '!=', $id)
-                        ->count();
-                    if ($count >= 3) {
-                        return response()->json(['error' => 'Cet élève a déjà le nombre maximum de 3 parents/tuteurs.'], 400);
-                    }
-                }
-
+                $eleveId = $request->input('eleve_id');
                 DB::table('eleve_parents')->where('parent_id', $id)->delete();
-                if ($eleve_id) {
+                if ($eleveId) {
+                    $count = DB::table('eleve_parents')->where('eleve_id', $eleveId)->where('parent_id', '!=', $id)->count();
+                    if ($count >= 3) {
+                        return response()->json(['error' => "Cet élève a déjà 3 parents/tuteurs."], 400);
+                    }
                     DB::table('eleve_parents')->insert([
-                        'eleve_id' => $eleve_id,
-                        'parent_id' => $id,
-                        'relation' => $request->input('relation', 'Tuteur'),
+                        'eleve_id'   => $eleveId,
+                        'parent_id'  => $id,
+                        'relation'   => $request->input('relation', 'Tuteur'),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
                 }
             }
 
-            $parent = DB::table('parent_users')->where('id', $id)->first();
-            $enfants = DB::table('eleve_parents')->where('parent_id', $id)->get();
-            $parent->nb_enfants = $enfants->count();
-            $parent->enfants = $enfants;
-            
-            return response()->json($parent);
+            $parent->refresh();
+            $nb_enfants = DB::table('eleve_parents')->where('parent_id', $id)->count();
+
+            return response()->json(array_merge($parent->toArray(), [
+                'nb_enfants' => $nb_enfants,
+                'enfants'    => DB::table('eleve_parents')->where('parent_id', $id)->get(),
+            ]));
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function destroy($id)
+    public function destroy(int $id)
     {
         try {
             DB::table('eleve_parents')->where('parent_id', $id)->delete();
-            DB::table('parent_users')->where('id', $id)->delete();
+            ParentUser::findOrFail($id)->delete();
             return response()->json(['message' => 'Deleted']);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function getEvents($id)
+    public function getEvents(int $id)
     {
-        // Rendez-vous (en_attente ou acceptés)
         $appointments = DB::table('appointments')
             ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
             ->where('appointments.parent_id', $id)
             ->whereIn('appointments.statut', ['en_attente', 'accepte'])
-            ->select('appointments.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'enseignants.matiere as enseignant_matiere', 'eleves.nom as eleve_nom', 'eleves.prenom as eleve_prenom')
+            ->select(
+                'appointments.*',
+                'enseignants.nom as enseignant_nom',
+                'enseignants.prenom as enseignant_prenom',
+                'enseignants.matiere as enseignant_matiere',
+                'eleves.nom as eleve_nom',
+                'eleves.prenom as eleve_prenom'
+            )
             ->get();
 
-        // Conversations en attente (demandes de messagerie de l'enseignant vers le parent)
         $conversations = DB::table('conversations')
             ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.parent_id', $id)
             ->whereIn('conversations.status', ['pending', 'accepted', 'rejected'])
-            ->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('messages')
-                      ->whereColumn('messages.conversation_id', 'conversations.id')
-                      ->where('messages.sender_type', '!=', 'parent');
-            })
-            ->select('conversations.*', 'enseignants.nom as enseignant_nom', 'enseignants.prenom as enseignant_prenom', 'enseignants.matiere as enseignant_matiere', 'ecoles.nom as ecole_nom')
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('messages')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->where('messages.sender_type', '!=', 'parent')
+            )
+            ->select(
+                'conversations.*',
+                'enseignants.nom as enseignant_nom',
+                'enseignants.prenom as enseignant_prenom',
+                'enseignants.matiere as enseignant_matiere',
+                'ecoles.nom as ecole_nom'
+            )
             ->get();
 
         return response()->json([
-            'success' => true,
-            'appointments' => $appointments,
+            'success'       => true,
+            'appointments'  => $appointments,
             'conversations' => $conversations,
         ]);
     }

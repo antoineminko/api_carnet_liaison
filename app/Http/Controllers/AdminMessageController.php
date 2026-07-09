@@ -11,6 +11,8 @@ use App\Models\ParentUser;
 use App\Services\PushNotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class AdminMessageController extends Controller
 {
@@ -60,6 +62,7 @@ class AdminMessageController extends Controller
         if ($request->filled('classe_id')) $cibles['classe_id'] = is_array($request->classe_id) ? $request->classe_id : explode(',', $request->classe_id);
         if ($request->filled('niveaux')) $cibles['niveaux'] = is_array($request->niveaux) ? $request->niveaux : explode(',', $request->niveaux);
         if ($request->filled('eleve_id')) $cibles['eleve_id'] = $request->eleve_id;
+        if ($request->filled('parent_id')) $cibles['parent_id'] = $request->parent_id;
 
         \App\Models\AdminBroadcast::create([
             'ecole_id' => $request->ecole_id,
@@ -187,6 +190,25 @@ class AdminMessageController extends Controller
         $sentCount = 0;
         $parentIdsSet = [];
 
+        // Précharger les relations pour éviter les requêtes N+1
+        $elevesParents = DB::table('eleve_parents')
+            ->whereIn('eleve_id', $elevesList)
+            ->get()
+            ->groupBy('eleve_id');
+
+        $allParentIds = $elevesParents->flatten()->pluck('parent_id')->unique()->toArray();
+        $parentsData = ParentUser::whereIn('id', $allParentIds)->get()->keyBy('id');
+
+        $existingConversations = Conversation::where('ecole_id', $request->ecole_id)
+            ->whereNull('enseignant_id')
+            ->whereIn('parent_id', $allParentIds)
+            ->get()
+            ->keyBy('parent_id');
+
+        $messagesData = [];
+        $conversationsToUpdate = [];
+        $now = now();
+
         foreach ($elevesList as $eleveId) {
             $adminInfo = null;
 
@@ -204,43 +226,43 @@ class AdminMessageController extends Controller
                 ]);
             }
 
-            // Récupérer les parents de cet élève
-            $parents = DB::table('eleve_parents')
-                ->where('eleve_id', $eleveId)
-                ->pluck('parent_id');
+            $parents = $elevesParents->get($eleveId, collect());
 
-            foreach ($parents as $parentId) {
-                // Créer Conversation & Message uniquement pour textual
+            foreach ($parents as $pivot) {
+                $parentId = $pivot->parent_id;
+
                 if ($request->type === 'textual') {
-                    $conversation = Conversation::firstOrCreate(
-                        [
+                    if ($existingConversations->has($parentId)) {
+                        $conversation = $existingConversations->get($parentId);
+                        if ($conversation->status !== 'accepted') {
+                            $conversationsToUpdate[] = $conversation->id;
+                            $conversation->status = 'accepted';
+                        }
+                    } else {
+                        $conversation = Conversation::create([
                             'ecole_id'      => $request->ecole_id,
                             'enseignant_id' => null,
                             'parent_id'     => $parentId,
-                        ],
-                        [
-                            'status' => 'accepted'
-                        ]
-                    );
-
-                    // If it already existed but wasn't accepted, update it
-                    if ($conversation->status !== 'accepted') {
-                        $conversation->update(['status' => 'accepted']);
+                            'status'        => 'accepted'
+                        ]);
+                        $existingConversations->put($parentId, $conversation);
                     }
 
-                    Message::create([
+                    $messagesData[] = [
                         'conversation_id' => $conversation->id,
                         'sender_type'     => 'admin',
                         'sender_id'       => $request->ecole_id,
                         'content'         => $content,
                         'fichier_url'     => $fichierUrl,
                         'is_read'         => false,
-                    ]);
+                        'created_at'      => $now,
+                        'updated_at'      => $now,
+                    ];
                 }
 
                 if (!in_array($parentId, $parentIdsSet)) {
                     $parentIdsSet[] = $parentId;
-                    $parent = ParentUser::find($parentId);
+                    $parent = $parentsData->get($parentId);
                     
                     if ($parent && !empty($parent->fcm_token)) {
                         $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
@@ -251,6 +273,10 @@ class AdminMessageController extends Controller
                             'eleve_id' => (string) $eleveId,
                         ];
 
+                        if ($fichierUrl) {
+                            $notificationData['fichier_url'] = $fichierUrl;
+                        }
+
                         if ($request->type === 'textual' && isset($conversation)) {
                             $notificationData['conversation_id'] = (string) $conversation->id;
                         } elseif ($adminInfo) {
@@ -259,9 +285,40 @@ class AdminMessageController extends Controller
 
                         $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
                     }
+
+                    if ($parent && !empty($parent->email)) {
+                        try {
+                            $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
+                            $emailContent = "Bonjour {$parent->prenom} {$parent->nom},\n\n" . $content . "\n\nCordialement,\nL'Administration";
+                            
+                            Mail::raw($emailContent, function($msg) use ($parent, $emailTitle, $request) {
+                                $msg->to($parent->email)
+                                    ->subject($emailTitle);
+                                
+                                if ($request->hasFile('fichier')) {
+                                    $file = $request->file('fichier');
+                                    $msg->attach($file->getRealPath(), [
+                                        'as' => $file->getClientOriginalName(),
+                                        'mime' => $file->getClientMimeType(),
+                                    ]);
+                                }
+                            });
+                        } catch (\Exception $e) {
+                            Log::error("Erreur envoi email au parent {$parent->id}: " . $e->getMessage());
+                        }
+                    }
+
                     $sentCount++;
                 }
             }
+        }
+
+        if (!empty($conversationsToUpdate)) {
+            Conversation::whereIn('id', $conversationsToUpdate)->update(['status' => 'accepted']);
+        }
+
+        if (!empty($messagesData)) {
+            Message::insert($messagesData);
         }
 
         return response()->json([
@@ -325,6 +382,62 @@ class AdminMessageController extends Controller
             'success'      => true,
             'informations' => $infos,
         ]);
+    }
+
+    // Récupérer les broadcasts (annonces) de l'Admin
+    public function getAdminBroadcasts(Request $request)
+    {
+        $ecole_id = $request->query('ecole_id');
+        
+        $broadcasts = \App\Models\AdminBroadcast::where('ecole_id', $ecole_id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->filter(function($b) {
+                $cibles = is_string($b->cibles) ? json_decode($b->cibles, true) : $b->cibles;
+                if (!$cibles) return false;
+                
+                // Exclure les messages envoyés individuellement (à un seul élève ou parent)
+                if (isset($cibles['eleve_id']) && count($cibles) === 1) return false;
+                if (isset($cibles['parent_id']) && count($cibles) === 1) return false;
+                
+                return true;
+            })
+            ->values()
+            ->map(function($b) {
+                $cibles = is_string($b->cibles) ? json_decode($b->cibles, true) : $b->cibles;
+                $targetLabel = 'Non spécifié';
+                
+                if (isset($cibles['tous_etablissement'])) {
+                    $targetLabel = 'Tout l\'établissement';
+                } elseif (isset($cibles['tous_enseignants'])) {
+                    $targetLabel = 'Tous les enseignants';
+                } elseif (isset($cibles['classe_id'])) {
+                    $classes = is_array($cibles['classe_id']) ? $cibles['classe_id'] : explode(',', $cibles['classe_id']);
+                    $targetLabel = count($classes) > 1 ? count($classes) . ' classes' : 'Classe spécifique';
+                    
+                    // Optionnel : on pourrait aller chercher le nom des classes, mais simple "X classes" ou "Classe" suffit
+                    $classesNoms = DB::table('classes')->whereIn('id', $classes)->pluck('nom')->toArray();
+                    if (!empty($classesNoms)) {
+                        $targetLabel = implode(', ', $classesNoms);
+                    }
+                } elseif (isset($cibles['niveaux'])) {
+                    $niveaux = is_array($cibles['niveaux']) ? $cibles['niveaux'] : explode(',', $cibles['niveaux']);
+                    $targetLabel = 'Niveaux : ' . implode(', ', $niveaux);
+                }
+
+                return [
+                    'id' => $b->id,
+                    'type' => $b->type,
+                    'titre' => $b->titre,
+                    'contenu' => $b->contenu,
+                    'fichier_url' => $b->fichier_url,
+                    'created_at' => $b->created_at,
+                    'cibles' => $cibles,
+                    'target_label' => $targetLabel
+                ];
+            });
+
+        return response()->json(['broadcasts' => $broadcasts]);
     }
 
     // Récupérer les conversations où l'Admin est impliqué (Admin <-> Parent ou Admin <-> Enseignant)
