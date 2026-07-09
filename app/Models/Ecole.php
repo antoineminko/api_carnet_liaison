@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Laravel\Sanctum\HasApiTokens;
 
 class Ecole extends Model
 {
-    use HasFactory;
+    use HasFactory, HasApiTokens;
 
     protected $fillable = [
         'nom',
@@ -23,6 +24,11 @@ class Ecole extends Model
         'email_admin',
         'password_admin',
     ];
+
+    // Hide sensitive fields from API responses
+    protected $hidden = ['password_admin'];
+
+    // ─── Relationships ────────────────────────────────────────────────────────
 
     public function classes()
     {

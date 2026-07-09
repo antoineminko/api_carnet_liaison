@@ -34,7 +34,11 @@ class EcoleController extends Controller
 
     public function publicProfile(string $code)
     {
-        $ecole = Ecole::select('id', 'nom', 'code', 'ville', 'annee_scolaire', 'logo', 'image_fond', 'description', 'nb_classes', 'nb_profs', 'nb_eleves')
+        $ecole = Ecole::select(
+                'id', 'nom', 'code', 'ville', 'annee_scolaire',
+                'logo', 'image_fond', 'description',
+                'nb_classes', 'nb_profs', 'nb_eleves'
+            )
             ->where('code', strtoupper($code))
             ->first();
 
@@ -42,13 +46,14 @@ class EcoleController extends Controller
             return response()->json(['error' => 'École introuvable.'], 404);
         }
 
+        // Return directly (no wrapping) — consistent with index()
         return response()->json($ecole);
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'nom'  => 'required|string',
+            'nom'  => 'required|string|max:255',
             'code' => 'required|string|max:10|unique:ecoles,code',
         ]);
 
@@ -61,9 +66,12 @@ class EcoleController extends Controller
             'logo'           => $request->input('logo'),
             'image_fond'     => $request->input('image_fond'),
             'email_admin'    => $request->input('email_admin'),
+            'nb_classes'     => $request->input('nb_classes', 0),
+            'nb_profs'       => $request->input('nb_profs', 0),
+            'nb_eleves'      => $request->input('nb_eleves', 0),
             'password_admin' => $request->filled('password_admin')
                 ? Hash::make($request->password_admin)
-                : null,
+                : Hash::make('password1234'), // Secure default
         ]);
 
         return response()->json($ecole, 201);

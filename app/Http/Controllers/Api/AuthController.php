@@ -95,12 +95,19 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $school = \App\Models\Ecole::where('email', $request->email)->first();
+        // The admin credentials are stored on the ecoles table
+        // as email_admin and password_admin (hashed)
+        $school = \App\Models\Ecole::where('email_admin', $request->email)->first();
 
-        if (!$school || !\Illuminate\Support\Facades\Hash::check($request->password, $school->password)) {
-            return response()->json(['success' => false, 'message' => 'Email ou mot de passe incorrect.'], 401);
+        if (!$school) {
+            return response()->json(['success' => false, 'message' => 'Aucun établissement trouvé avec cet email.'], 401);
         }
 
+        if (!Hash::check($request->password, $school->password_admin)) {
+            return response()->json(['success' => false, 'message' => 'Mot de passe incorrect.'], 401);
+        }
+
+        // Revoke previous tokens to prevent session accumulation
         $school->tokens()->where('name', 'admin_token')->delete();
         $token = $school->createToken('admin_token')->plainTextToken;
 
@@ -110,9 +117,9 @@ class AuthController extends Controller
             'user'    => [
                 'id'       => $school->id,
                 'nom'      => $school->nom,
-                'email'    => $school->email,
+                'email'    => $school->email_admin,
                 'role'     => 'admin',
-                'ecole_id' => $school->id, // They manage their own school
+                'ecole_id' => $school->id,
                 'code'     => $school->code,
             ],
         ]);
