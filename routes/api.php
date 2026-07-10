@@ -25,7 +25,7 @@ use App\Http\Controllers\AdminMessageController;
 Route::post('/login/parent', [AuthController::class, 'loginParent'])->middleware('school');
 Route::post('/login/teacher', [AuthController::class, 'loginTeacher'])->middleware('school');
 Route::post('/login/admin', [AuthController::class, 'loginAdmin']); // pas de school header requis car le mail est unique
-Route::post('/logout', [AuthController::class, 'logout']);
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 // Liaison
 Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
