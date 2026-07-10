@@ -45,6 +45,7 @@ class AuthController extends Controller
                 'email'      => $parent->email,
                 'telephone'  => $parent->telephone,
                 'ecole_id'   => $parent->ecole_id,
+                'school_code'=> $parent->ecole->code ?? null,
                 'nb_enfants' => $nb_enfants,
             ],
         ]);
@@ -84,6 +85,7 @@ class AuthController extends Controller
                 'telephone'=> $teacher->telephone,
                 'matiere'  => $teacher->matiere,
                 'ecole_id' => $teacher->ecole_id,
+                'school_code'=> $teacher->ecole->code ?? null,
             ],
         ]);
     }
