@@ -11,7 +11,7 @@ class EcoleController extends Controller
 {
     public function index()
     {
-        return response()->json(Ecole::select('id', 'nom', 'code', 'ville', 'annee_scolaire', 'logo', 'nb_classes', 'nb_profs', 'nb_eleves')->get());
+        return response()->json(Ecole::select('id', 'nom', 'code', 'acronyme', 'ville', 'annee_scolaire', 'logo', 'nb_classes', 'nb_profs', 'nb_eleves')->get());
     }
 
     public function search(Request $request)
@@ -22,7 +22,7 @@ class EcoleController extends Controller
             return response()->json([]);
         }
 
-        $ecoles = Ecole::select('id', 'nom', 'code', 'ville', 'annee_scolaire', 'logo', 'nb_classes', 'nb_profs', 'nb_eleves')
+        $ecoles = Ecole::select('id', 'nom', 'code', 'acronyme', 'ville', 'annee_scolaire', 'logo', 'nb_classes', 'nb_profs', 'nb_eleves')
             ->where('nom', 'LIKE', "%{$q}%")
             ->orWhere('code', 'LIKE', "%{$q}%")
             ->orWhere('ville', 'LIKE', "%{$q}%")
@@ -35,7 +35,7 @@ class EcoleController extends Controller
     public function publicProfile(string $code)
     {
         $ecole = Ecole::select(
-                'id', 'nom', 'code', 'ville', 'annee_scolaire',
+                'id', 'nom', 'code', 'acronyme', 'ville', 'annee_scolaire',
                 'logo', 'image_fond', 'description',
                 'nb_classes', 'nb_profs', 'nb_eleves'
             )
@@ -85,6 +85,7 @@ class EcoleController extends Controller
         $payload = [];
 
         if ($request->has('nom'))            $payload['nom']            = $request->nom;
+        if ($request->has('acronyme'))       $payload['acronyme']       = $request->acronyme;
         if ($request->has('annee_scolaire')) $payload['annee_scolaire'] = $request->annee_scolaire;
         if ($request->has('ville'))          $payload['ville']          = $request->ville;
         if ($request->has('description'))    $payload['description']    = $request->description;

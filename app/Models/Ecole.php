@@ -13,6 +13,7 @@ class Ecole extends Model
     protected $fillable = [
         'nom',
         'code',
+        'acronyme',
         'annee_scolaire',
         'nb_classes',
         'nb_profs',
