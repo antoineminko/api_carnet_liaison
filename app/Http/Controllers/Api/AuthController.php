@@ -19,26 +19,34 @@ class AuthController extends Controller
 
         $schoolId = $request->attributes->get('school')?->id;
 
-        $parent = ParentUser::where(function ($q) use ($request) {
+        $parents = ParentUser::with('ecole')->where(function ($q) use ($request) {
                 $q->where('email', $request->identifier)
                   ->orWhere('telephone', $request->identifier);
             })
             ->when($schoolId, fn ($q) => $q->where('ecole_id', $schoolId))
-            ->first();
+            ->get();
 
-        if (!$parent || !Hash::check($request->password, $parent->password)) {
+        if ($parents->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'Identifiant ou mot de passe incorrect.'], 401);
         }
 
-        $parent->tokens()->where('name', 'parent_token')->delete();
-        $token = $parent->createToken('parent_token')->plainTextToken;
+        $validParents = $parents->filter(function($parent) use ($request) {
+            return Hash::check($request->password, $parent->password);
+        });
 
-        $nb_enfants = $parent->eleves()->count();
+        if ($validParents->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Identifiant ou mot de passe incorrect.'], 401);
+        }
 
-        return response()->json([
-            'success' => true,
-            'token'   => $token,
-            'parent'  => [
+        $responseData = [];
+        $mainToken = null;
+
+        foreach ($validParents as $parent) {
+            $parent->tokens()->where('name', 'parent_token')->delete();
+            $currentToken = $parent->createToken('parent_token')->plainTextToken;
+            if (!$mainToken) $mainToken = $currentToken;
+
+            $responseData[] = [
                 'id'         => $parent->id,
                 'nom'        => $parent->nom,
                 'prenom'     => $parent->prenom,
@@ -46,8 +54,16 @@ class AuthController extends Controller
                 'telephone'  => $parent->telephone,
                 'ecole_id'   => $parent->ecole_id,
                 'school_code'=> $parent->ecole->code ?? null,
-                'nb_enfants' => $nb_enfants,
-            ],
+                'nb_enfants' => $parent->eleves()->count(),
+                'token'      => $currentToken,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'token'   => $mainToken,
+            'parent'  => $responseData[0],
+            'parents' => $responseData,
         ]);
     }
 
@@ -60,33 +76,51 @@ class AuthController extends Controller
 
         $schoolId = $request->attributes->get('school')?->id;
 
-        $teacher = Enseignant::where(function ($q) use ($request) {
+        $teachers = Enseignant::with('ecole')->where(function ($q) use ($request) {
                 $q->where('email', $request->identifier)
                   ->orWhere('telephone', $request->identifier);
             })
             ->when($schoolId, fn ($q) => $q->where('ecole_id', $schoolId))
-            ->first();
+            ->get();
 
-        if (!$teacher || !Hash::check($request->password, $teacher->password)) {
+        if ($teachers->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'Identifiant ou mot de passe incorrect.'], 401);
         }
 
-        $teacher->tokens()->where('name', 'teacher_token')->delete();
-        $token = $teacher->createToken('teacher_token')->plainTextToken;
+        $validTeachers = $teachers->filter(function($teacher) use ($request) {
+            return Hash::check($request->password, $teacher->password);
+        });
+
+        if ($validTeachers->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Identifiant ou mot de passe incorrect.'], 401);
+        }
+
+        $responseData = [];
+        $mainToken = null;
+
+        foreach ($validTeachers as $teacher) {
+            $teacher->tokens()->where('name', 'teacher_token')->delete();
+            $currentToken = $teacher->createToken('teacher_token')->plainTextToken;
+            if (!$mainToken) $mainToken = $currentToken;
+
+            $responseData[] = [
+                'id'         => $teacher->id,
+                'nom'        => $teacher->nom,
+                'prenom'     => $teacher->prenom,
+                'email'      => $teacher->email,
+                'telephone'  => $teacher->telephone,
+                'matiere'    => $teacher->matiere,
+                'ecole_id'   => $teacher->ecole_id,
+                'school_code'=> $teacher->ecole->code ?? null,
+                'token'      => $currentToken,
+            ];
+        }
 
         return response()->json([
             'success' => true,
-            'token'   => $token,
-            'teacher' => [
-                'id'       => $teacher->id,
-                'nom'      => $teacher->nom,
-                'prenom'   => $teacher->prenom,
-                'email'    => $teacher->email,
-                'telephone'=> $teacher->telephone,
-                'matiere'  => $teacher->matiere,
-                'ecole_id' => $teacher->ecole_id,
-                'school_code'=> $teacher->ecole->code ?? null,
-            ],
+            'token'   => $mainToken,
+            'teacher' => $responseData[0],
+            'teachers'=> $responseData,
         ]);
     }
 
