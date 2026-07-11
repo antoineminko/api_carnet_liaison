@@ -9,10 +9,13 @@ use Illuminate\Support\Facades\Hash;
 
 class EnseignantController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $enseignants = DB::table('enseignants')->get();
+            $ecole = $request->attributes->get('school');
+            $enseignants = DB::table('enseignants')
+                ->where('ecole_id', $ecole->id)
+                ->get();
             return response()->json($enseignants);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -22,7 +25,10 @@ class EnseignantController extends Controller
     public function store(Request $request)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            
             $id = DB::table('enseignants')->insertGetId([
+                'ecole_id' => $ecole->id,
                 'nom' => $request->input('nom', 'N/A'),
                 'prenom' => $request->input('prenom', 'N/A'),
                 'matiere' => $request->input('matiere', null),
@@ -33,14 +39,15 @@ class EnseignantController extends Controller
                 'updated_at' => now(),
             ]);
 
-            // Assignation comme prof principal si demandÃ©
+            // Assignation comme prof principal si demandé
             if ($request->input('est_prof_principal') && $request->input('classe_principale_id')) {
                 DB::table('classes')
                     ->where('id', $request->input('classe_principale_id'))
+                    ->where('ecole_id', $ecole->id)
                     ->update(['prof_principal_id' => $id]);
             }
 
-            $enseignant = DB::table('enseignants')->where('id', $id)->first();
+            $enseignant = DB::table('enseignants')->where('id', $id)->where('ecole_id', $ecole->id)->first();
             return response()->json($enseignant, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -50,6 +57,8 @@ class EnseignantController extends Controller
     public function update(Request $request, $id)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            
             $data = [
                 'nom' => $request->input('nom'),
                 'prenom' => $request->input('prenom'),
@@ -59,32 +68,34 @@ class EnseignantController extends Controller
                 'updated_at' => now(),
             ];
 
-            DB::table('enseignants')->where('id', $id)->update($data);
+            DB::table('enseignants')->where('id', $id)->where('ecole_id', $ecole->id)->update($data);
 
             if ($request->input('est_prof_principal') && $request->input('classe_principale_id')) {
                 // Retirer cet enseignant des autres classes s'il était déjà prof principal ailleurs
-                DB::table('classes')->where('prof_principal_id', $id)->update(['prof_principal_id' => null]);
+                DB::table('classes')->where('prof_principal_id', $id)->where('ecole_id', $ecole->id)->update(['prof_principal_id' => null]);
                 
                 // Assigner à la nouvelle classe
                 DB::table('classes')
                     ->where('id', $request->input('classe_principale_id'))
+                    ->where('ecole_id', $ecole->id)
                     ->update(['prof_principal_id' => $id]);
             } elseif ($request->has('est_prof_principal') && !$request->input('est_prof_principal')) {
                 // S'il ne doit plus être prof principal
-                DB::table('classes')->where('prof_principal_id', $id)->update(['prof_principal_id' => null]);
+                DB::table('classes')->where('prof_principal_id', $id)->where('ecole_id', $ecole->id)->update(['prof_principal_id' => null]);
             }
 
-            $enseignant = DB::table('enseignants')->where('id', $id)->first();
+            $enseignant = DB::table('enseignants')->where('id', $id)->where('ecole_id', $ecole->id)->first();
             return response()->json($enseignant);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
-            DB::table('enseignants')->where('id', $id)->delete();
+            $ecole = $request->attributes->get('school');
+            DB::table('enseignants')->where('id', $id)->where('ecole_id', $ecole->id)->delete();
             return response()->json(['message' => 'Deleted']);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

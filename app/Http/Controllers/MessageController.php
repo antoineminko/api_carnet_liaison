@@ -27,13 +27,21 @@ class MessageController extends Controller
         $enseignant_id = $request->input('enseignant_id');
         $parent_id = $request->input('parent_id');
 
+        $ecoleId = $request->attributes->get('school')?->id;
+
         if ($conversation_id) {
-            $conversation = Conversation::find($conversation_id);
+            $conversationQuery = Conversation::where('id', $conversation_id);
         } else if ($enseignant_id && $parent_id) {
-            $conversation = Conversation::where('enseignant_id', $enseignant_id)->where('parent_id', $parent_id)->first();
+            $conversationQuery = Conversation::where('enseignant_id', $enseignant_id)->where('parent_id', $parent_id);
         } else {
             return response()->json(['error' => 'conversation_id ou (enseignant_id et parent_id) requis'], 400);
         }
+
+        if ($ecoleId) {
+            $conversationQuery->where('ecole_id', $ecoleId);
+        }
+
+        $conversation = $conversationQuery->first();
 
         if (!$conversation) {
             return response()->json(['error' => 'Conversation non trouvée'], 404);
@@ -72,8 +80,10 @@ class MessageController extends Controller
             return response()->json(['error' => $validator->errors()], 400);
         }
 
+        $ecoleId = $request->attributes->get('school')?->id;
+
         $conversation = Conversation::firstOrCreate(
-            ['enseignant_id' => $request->enseignant_id, 'parent_id' => $request->parent_id],
+            ['enseignant_id' => $request->enseignant_id, 'parent_id' => $request->parent_id, 'ecole_id' => $ecoleId],
             ['status' => 'pending', 'subject' => $request->subject]
         );
 

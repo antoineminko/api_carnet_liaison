@@ -66,6 +66,7 @@ class EcoleController extends Controller
             'logo'           => $request->input('logo'),
             'image_fond'     => $request->input('image_fond'),
             'email_admin'    => $request->input('email_admin'),
+            'telephone'      => $request->input('telephone'),
             'nb_classes'     => $request->input('nb_classes', 0),
             'nb_profs'       => $request->input('nb_profs', 0),
             'nb_eleves'      => $request->input('nb_eleves', 0),
@@ -76,6 +77,7 @@ class EcoleController extends Controller
 
         return response()->json($ecole, 201);
     }
+
 
     public function update(Request $request, int $id)
     {

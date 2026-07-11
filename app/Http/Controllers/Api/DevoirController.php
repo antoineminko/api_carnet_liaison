@@ -31,6 +31,14 @@ class DevoirController extends Controller
             'eleves.*' => 'integer|exists:eleves,id',
         ]);
 
+        $ecoleId = $request->attributes->get('school')?->id;
+        if ($ecoleId) {
+            $classe = \App\Models\Classe::find($request->classe_id);
+            if (!$classe || $classe->ecole_id != $ecoleId) {
+                return response()->json(['error' => 'Classe non trouvée ou accès refusé'], 403);
+            }
+        }
+
         $devoir = Devoir::create([
             'classe_id' => $request->classe_id,
             'enseignant_id' => $request->enseignant_id,
@@ -144,12 +152,18 @@ class DevoirController extends Controller
             ->unique()
             ->values();
 
+        $ecoleId = request()->attributes->get('school')?->id;
+
         // Récupérer toutes les classes uniques avec info école
-        $classes = DB::table('classes')
+        $query = DB::table('classes')
             ->leftJoin('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
-            ->whereIn('classes.id', $allClassIds)
-            ->select('classes.id', 'classes.nom', 'ecoles.nom as ecole_nom')
-            ->get();
+            ->whereIn('classes.id', $allClassIds);
+
+        if ($ecoleId) {
+            $query->where('classes.ecole_id', $ecoleId);
+        }
+
+        $classes = $query->select('classes.id', 'classes.nom', 'ecoles.nom as ecole_nom')->get();
 
         return response()->json([
             'classes' => $classes
@@ -161,9 +175,16 @@ class DevoirController extends Controller
      */
     public function getClassStudents($classeId)
     {
-        $eleves = DB::table('eleves')
-            ->where('classe_id', $classeId)
-            ->select('id', 'prenom', 'nom', 'photo')
+        $ecoleId = request()->attributes->get('school')?->id;
+
+        $query = DB::table('eleves')
+            ->where('classe_id', $classeId);
+
+        if ($ecoleId) {
+            $query->where('ecole_id', $ecoleId);
+        }
+
+        $eleves = $query->select('id', 'prenom', 'nom', 'photo')
             ->orderBy('nom')
             ->orderBy('prenom')
             ->get();

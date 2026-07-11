@@ -9,11 +9,13 @@ use Illuminate\Support\Facades\Storage;
 
 class EleveController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
+            $ecole = $request->attributes->get('school');
             $eleves = DB::table('eleves')
                 ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('classes.ecole_id', $ecole->id)
                 ->select(
                     'eleves.*',
                     'classes.nom as classe_nom'
@@ -34,22 +36,24 @@ class EleveController extends Controller
     public function store(Request $request)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            
             // Résoudre classe_id depuis classe_code ou classe_id direct
             $classeId = $request->input('classe_id');
             if (!$classeId && $request->input('classe_code')) {
-                $classe = DB::table('classes')->where('code', $request->input('classe_code'))->first();
+                $classe = DB::table('classes')->where('code', $request->input('classe_code'))->where('ecole_id', $ecole->id)->first();
                 $classeId = $classe ? $classe->id : null;
             }
 
             if (!$classeId) {
                 // If still no classe_id, check if 'Non assigné' exists, else create it
-                $defaultClass = DB::table('classes')->where('nom', 'Non assigné')->first();
+                $defaultClass = DB::table('classes')->where('nom', 'Non assigné')->where('ecole_id', $ecole->id)->first();
                 if ($defaultClass) {
                     $classeId = $defaultClass->id;
                 } else {
                     $classeId = DB::table('classes')->insertGetId([
                         'nom' => 'Non assigné',
-                        'ecole_id' => 1,
+                        'ecole_id' => $ecole->id,
                         'created_at' => now(),
                         'updated_at' => now()
                     ]);
@@ -94,10 +98,13 @@ class EleveController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
-    public function getByClasse($classeId)
+    public function getByClasse(Request $request, $classeId)
     {
         try {
+            $ecole = $request->attributes->get('school');
             $eleves = DB::table('eleves')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('classes.ecole_id', $ecole->id)
                 ->leftJoin('attendances', function ($join) {
                     $join->on('eleves.id', '=', 'attendances.eleve_id')
                          ->where('attendances.date', '=', date('Y-m-d'));
@@ -138,6 +145,27 @@ class EleveController extends Controller
                 $data['photo'] = $path;
             }
 
+            $ecole = $request->attributes->get('school');
+            
+            // Validate that the eleve exists and belongs to the school
+            $existingEleve = DB::table('eleves')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('eleves.id', $id)
+                ->where('classes.ecole_id', $ecole->id)
+                ->first();
+
+            if (!$existingEleve) {
+                return response()->json(['error' => 'Elève introuvable ou accès refusé'], 404);
+            }
+
+            // Validate that the new class belongs to the school
+            if ($request->has('classe_id')) {
+                $newClass = DB::table('classes')->where('id', $request->input('classe_id'))->where('ecole_id', $ecole->id)->first();
+                if (!$newClass) {
+                    return response()->json(['error' => 'Classe introuvable ou accès refusé'], 400);
+                }
+            }
+
             DB::table('eleves')->where('id', $id)->update($data);
 
             $eleve = DB::table('eleves')
@@ -159,9 +187,22 @@ class EleveController extends Controller
         }
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            
+            $existingEleve = DB::table('eleves')
+                ->join('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->where('eleves.id', $id)
+                ->where('classes.ecole_id', $ecole->id)
+                ->select('eleves.id')
+                ->first();
+
+            if (!$existingEleve) {
+                return response()->json(['error' => 'Elève introuvable ou accès refusé'], 404);
+            }
+
             DB::table('eleves')->where('id', $id)->delete();
             return response()->json(['message' => 'Deleted']);
         } catch (\Exception $e) {

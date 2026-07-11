@@ -33,10 +33,13 @@ class ClasseController extends Controller
         ];
     }
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $classes = Classe::with(['ecole', 'profPrincipal', 'enseignants'])->get();
+            $ecole = $request->attributes->get('school');
+            $classes = Classe::with(['ecole', 'profPrincipal', 'enseignants'])
+                ->where('ecole_id', $ecole->id)
+                ->get();
             return response()->json($classes->map(fn ($c) => $this->formatClasse($c))->values());
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -46,18 +49,18 @@ class ClasseController extends Controller
     public function store(Request $request)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            
             $nom = $request->input('nom', '');
             $code = $request->input('code') ?: strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $nom));
             $code = substr($code, 0, 5);
             $suffix = 1;
             $baseCode = $code;
-            while (Classe::where('code', $code)->exists()) {
+            while (Classe::where('code', $code)->where('ecole_id', $ecole->id)->exists()) {
                 $code = $baseCode . $suffix++;
             }
 
-            $ecoleId = $request->input('ecole_id')
-                ?? Classe::latest()->value('ecole_id')
-                ?? DB::table('ecoles')->value('id');
+            $ecoleId = $ecole->id;
 
             $classe = Classe::create([
                 'nom'               => $nom,
@@ -81,7 +84,8 @@ class ClasseController extends Controller
     public function update(Request $request, int $id)
     {
         try {
-            $classe = Classe::findOrFail($id);
+            $ecole = $request->attributes->get('school');
+            $classe = Classe::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
 
             $classe->update(array_filter([
                 'nom'               => $request->input('nom'),
@@ -100,20 +104,25 @@ class ClasseController extends Controller
         }
     }
 
-    public function destroy(int $id)
+    public function destroy(Request $request, int $id)
     {
         try {
-            Classe::findOrFail($id)->delete();
+            $ecole = $request->attributes->get('school');
+            $classe = Classe::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
+            $classe->delete();
             return response()->json(['message' => 'Deleted']);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function getAnnouncements(int $id)
+    public function getAnnouncements(Request $request, $id)
     {
         try {
-            $classe = Classe::findOrFail($id);
+            $ecole = $request->attributes->get('school');
+            
+            // Validate class belongs to the school
+            $classe = Classe::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
 
             $niveau = explode(' ', $classe->nom)[0] ?? null;
 

@@ -27,10 +27,9 @@ Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
 Route::post('/login/admin', [AuthController::class, 'loginAdmin']); // pas de school header requis car le mail est unique
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
-// Liaison
+// Liaison — publiques (utilisées par app mobile parent)
 Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
 Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
-Route::post('/admin/parents/link-child', [LiaisonController::class, 'adminLinkChild']);
 
 // Ecoles — routes publiques (aucun middleware school requis)
 Route::get('/ecoles', [EcoleController::class, 'index']);
@@ -40,19 +39,21 @@ Route::post('/ecoles', [EcoleController::class, 'store']);
 Route::put('/ecoles/{id}', [EcoleController::class, 'update']);
 Route::delete('/ecoles/{id}', [EcoleController::class, 'destroy']);
 
-// Classes
-Route::get('/classes', [ClasseController::class, 'index']);
-Route::get('/classes/{id}/announcements', [ClasseController::class, 'getAnnouncements']);
-Route::post('/classes', [ClasseController::class, 'store']);
-Route::put('/classes/{id}', [ClasseController::class, 'update']);
-Route::delete('/classes/{id}', [ClasseController::class, 'destroy']);
+// Classes (with school context)
+Route::middleware(['school'])->group(function () {
+    Route::get('/classes', [ClasseController::class, 'index']);
+    Route::get('/classes/{id}/announcements', [ClasseController::class, 'getAnnouncements']);
+    Route::post('/classes', [ClasseController::class, 'store']);
+    Route::put('/classes/{id}', [ClasseController::class, 'update']);
+    Route::delete('/classes/{id}', [ClasseController::class, 'destroy']);
 
-// Eleves
-Route::get('/eleves', [EleveController::class, 'index']);
-Route::post('/eleves', [EleveController::class, 'store']);
-Route::put('/eleves/{id}', [EleveController::class, 'update']);
-Route::delete('/eleves/{id}', [EleveController::class, 'destroy']);
-Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']);
+    // Eleves
+    Route::get('/eleves', [EleveController::class, 'index']);
+    Route::post('/eleves', [EleveController::class, 'store']);
+    Route::put('/eleves/{id}', [EleveController::class, 'update']);
+    Route::delete('/eleves/{id}', [EleveController::class, 'destroy']);
+    Route::get('/classes/{classeId}/eleves', [EleveController::class, 'getByClasse']);
+});
 
 // Appel (Présences)
 Route::post('/attendances', [AttendanceController::class, 'submitAttendance']);
@@ -94,28 +95,35 @@ Route::get('/appointments', [AppointmentController::class, 'index']);
 Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
 
 // Parents
-Route::get('/parents', [ParentController::class, 'index']);
-Route::post('/parents', [ParentController::class, 'store']);
-Route::put('/parents/{id}', [ParentController::class, 'update']);
-Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
-Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
-Route::post('/parents/{id}/children/{eleve_id}/verify', [ParentController::class, 'verifyChildAccess']);
-Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
+Route::middleware(['school'])->group(function () {
+    Route::get('/parents', [ParentController::class, 'index']);
+    Route::post('/parents', [ParentController::class, 'store']);
+    Route::put('/parents/{id}', [ParentController::class, 'update']);
+    Route::delete('/parents/{id}', [ParentController::class, 'destroy']);
+    Route::get('/parents/{id}/children', [ParentController::class, 'getChildren']);
+    Route::post('/parents/{id}/children/{eleve_id}/verify', [ParentController::class, 'verifyChildAccess']);
+    Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
+    // Liaison admin — nécessite le contexte école (X-School-Code)
+    Route::post('/admin/parents/link-child', [LiaisonController::class, 'adminLinkChild']);
+});
+
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);
 Route::get('/enseignants/{id}/conversations', [MessageController::class, 'getConversationsForTeacher']);
 Route::get('/enseignants/{id}/admin-conversations', [MessageController::class, 'getAdminConversationsForTeacher']);
 
 // Matieres
-Route::get('/matieres', [MatiereController::class, 'index']);
-Route::post('/matieres', [MatiereController::class, 'store']);
-Route::put('/matieres/{id}', [MatiereController::class, 'update']);
-Route::delete('/matieres/{id}', [MatiereController::class, 'destroy']);
+Route::middleware(['school'])->group(function () {
+    Route::get('/matieres', [MatiereController::class, 'index']);
+    Route::post('/matieres', [MatiereController::class, 'store']);
+    Route::put('/matieres/{id}', [MatiereController::class, 'update']);
+    Route::delete('/matieres/{id}', [MatiereController::class, 'destroy']);
 
-// Enseignants
-Route::get('/enseignants', [EnseignantController::class, 'index']);
-Route::post('/enseignants', [EnseignantController::class, 'store']);
-Route::put('/enseignants/{id}', [EnseignantController::class, 'update']);
-Route::delete('/enseignants/{id}', [EnseignantController::class, 'destroy']);
+    // Enseignants
+    Route::get('/enseignants', [EnseignantController::class, 'index']);
+    Route::post('/enseignants', [EnseignantController::class, 'store']);
+    Route::put('/enseignants/{id}', [EnseignantController::class, 'update']);
+    Route::delete('/enseignants/{id}', [EnseignantController::class, 'destroy']);
+});
 Route::get('/enseignants/{id}/dashboard', [EnseignantDashboardController::class, 'getDashboard']);
 Route::get('/enseignants/{id}/events', [EnseignantDashboardController::class, 'getEvents']);
 Route::get('/enseignants/{id}/classes/{classId}', [EnseignantDashboardController::class, 'getClassDetails']);
@@ -128,46 +136,54 @@ Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRe
 Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::class, 'markAllReadForChild']);
 
 
-// Messagerie
-Route::get('/messages/conversation', [MessageController::class, 'getConversation']);
-Route::post('/messages/conversation/initiate', [MessageController::class, 'initiateConversation']);
-Route::put('/messages/conversation/{id}/status', [MessageController::class, 'updateConversationStatus']);
-Route::post('/messages', [MessageController::class, 'sendMessage']);
+// Messagerie, Appels, Signalements et Devoirs protégés par le contexte école
+Route::middleware(['school'])->group(function () {
+    // Messagerie
+    Route::get('/messages/conversation', [MessageController::class, 'getConversation']);
+    Route::post('/messages/conversation/initiate', [MessageController::class, 'initiateConversation']);
+    Route::put('/messages/conversation/{id}/status', [MessageController::class, 'updateConversationStatus']);
+    Route::post('/messages', [MessageController::class, 'sendMessage']);
 
-// Appels (Calls)
-Route::post('/calls', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
-Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
-Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
-Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
-Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
-Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
+    // Appels (Calls)
+    Route::post('/calls', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
+    Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
+    Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
+    Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
+    Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
+    Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
 
-// Signaling WebRTC
-Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
-Route::post('/calls/{callId}/answer', [\App\Http\Controllers\Api\CallController::class, 'storeAnswer']);
-Route::post('/calls/{callId}/ice-candidate', [\App\Http\Controllers\Api\CallController::class, 'storeIceCandidate']);
-Route::get('/calls/{callId}/signaling', [\App\Http\Controllers\Api\CallController::class, 'getSignaling']);
+    // Signaling WebRTC
+    Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
+    Route::post('/calls/{callId}/answer', [\App\Http\Controllers\Api\CallController::class, 'storeAnswer']);
+    Route::post('/calls/{callId}/ice-candidate', [\App\Http\Controllers\Api\CallController::class, 'storeIceCandidate']);
+    Route::get('/calls/{callId}/signaling', [\App\Http\Controllers\Api\CallController::class, 'getSignaling']);
 
-// Signalements (Reports)
-Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
-Route::get('/reports', [\App\Http\Controllers\Api\ReportController::class, 'index']);
-Route::get('/reports/{id}', [\App\Http\Controllers\Api\ReportController::class, 'show']);
-Route::put('/reports/{id}/status', [\App\Http\Controllers\Api\ReportController::class, 'updateStatus']);
-Route::get('/reports/user', [\App\Http\Controllers\Api\ReportController::class, 'getUserReports']);
-Route::get('/reports/against', [\App\Http\Controllers\Api\ReportController::class, 'getReportsAgainstUser']);
-Route::get('/reports/eleve/{eleve_id}', [\App\Http\Controllers\Api\ReportController::class, 'getReportsForEleve']);
+    // Signalements (Reports)
+    Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);
+    Route::get('/reports', [\App\Http\Controllers\Api\ReportController::class, 'index']);
+    Route::get('/reports/{id}', [\App\Http\Controllers\Api\ReportController::class, 'show']);
+    Route::put('/reports/{id}/status', [\App\Http\Controllers\Api\ReportController::class, 'updateStatus']);
+    Route::get('/reports/user', [\App\Http\Controllers\Api\ReportController::class, 'getUserReports']);
+    Route::get('/reports/against', [\App\Http\Controllers\Api\ReportController::class, 'getReportsAgainstUser']);
+    Route::get('/reports/eleve/{eleve_id}', [\App\Http\Controllers\Api\ReportController::class, 'getReportsForEleve']);
 
-// Administration Messages
-Route::prefix('admin/messages')->group(function () {
-    Route::post('/send', [AdminMessageController::class, 'sendMessageToParent']);
-    Route::get('/conversations', [AdminMessageController::class, 'getAdminConversations']);
-    Route::get('/broadcasts', [AdminMessageController::class, 'getAdminBroadcasts']);
-    Route::get('/conversations/{id}', [AdminMessageController::class, 'getAdminMessages']);
-    Route::post('/conversations/{id}/reply', [AdminMessageController::class, 'replyAdminMessage']);
+    // Devoirs
+    Route::post('/devoirs', [\App\Http\Controllers\Api\DevoirController::class, 'store']);
+    Route::get('/enseignants/{id}/classes-devoirs', [\App\Http\Controllers\Api\DevoirController::class, 'getTeacherClasses']);
+    Route::get('/classes/{id}/eleves', [\App\Http\Controllers\Api\DevoirController::class, 'getClassStudents']);
+
+    // Administration Messages
+    Route::prefix('admin/messages')->group(function () {
+        Route::post('/send', [AdminMessageController::class, 'sendMessageToParent']);
+        Route::get('/conversations', [AdminMessageController::class, 'getAdminConversations']);
+        Route::get('/broadcasts', [AdminMessageController::class, 'getAdminBroadcasts']);
+        Route::get('/conversations/{id}', [AdminMessageController::class, 'getAdminMessages']);
+        Route::post('/conversations/{id}/reply', [AdminMessageController::class, 'replyAdminMessage']);
+    });
+    Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
+    Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
+    Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 });
-Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
-Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
-Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 
 // Protected routes
 Route::get('/user', function (Request $request) {

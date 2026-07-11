@@ -23,6 +23,7 @@ class Ecole extends Model
         'ville',
         'description',
         'email_admin',
+        'telephone',
         'password_admin',
     ];
 

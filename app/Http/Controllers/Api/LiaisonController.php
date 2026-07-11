@@ -83,13 +83,40 @@ class LiaisonController extends Controller
             'relation' => 'nullable|string'
         ]);
 
+        // Isolation multi-tenant : récupérer l'école depuis le middleware
+        $ecole = $request->attributes->get('school');
+        $ecoleId = $ecole?->id;
+
         $parentId = $request->parent_id;
         $eleveIds = $request->eleve_ids;
         $relation = $request->input('relation', 'Tuteur');
         $linkedCount = 0;
         $errors = [];
 
+        // Vérifier que le parent appartient à cette école
+        $parent = \App\Models\ParentUser::where('id', $parentId)
+            ->where('ecole_id', $ecoleId)
+            ->first();
+
+        if (!$parent) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Parent introuvable ou accès refusé.'
+            ], 404);
+        }
+
         foreach ($eleveIds as $eleveId) {
+            // Vérifier que l'élève appartient à cette école
+            $eleve = Eleve::with('classe')
+                ->where('id', $eleveId)
+                ->whereHas('classe', fn($q) => $q->where('ecole_id', $ecoleId))
+                ->first();
+
+            if (!$eleve) {
+                $errors[] = "L'élève #$eleveId est introuvable ou n'appartient pas à cette école.";
+                continue;
+            }
+
             $exists = DB::table('eleve_parents')
                 ->where('eleve_id', $eleveId)
                 ->where('parent_id', $parentId)
@@ -128,4 +155,5 @@ class LiaisonController extends Controller
                 : "Les enfants sélectionnés sont déjà liés à ce parent."
         ]);
     }
+
 }

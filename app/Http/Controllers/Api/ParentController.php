@@ -11,10 +11,13 @@ use Illuminate\Support\Facades\Hash;
 
 class ParentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $parents = ParentUser::with(['eleves.classe.ecole'])->get();
+            $ecole = $request->attributes->get('school');
+            $parents = ParentUser::with(['eleves.classe.ecole'])
+                ->where('ecole_id', $ecole->id)
+                ->get();
 
             return response()->json($parents->map(function ($parent) {
                 return [
@@ -43,7 +46,8 @@ class ParentController extends Controller
     public function store(Request $request)
     {
         try {
-            $ecoleId = $request->input('ecole_id');
+            $ecole = $request->attributes->get('school');
+            $ecoleId = $ecole->id;
 
             if ($request->input('eleve_id')) {
                 $count = DB::table('eleve_parents')->where('eleve_id', $request->input('eleve_id'))->count();
@@ -52,9 +56,12 @@ class ParentController extends Controller
                 }
             }
 
-            if (!$ecoleId && $request->input('eleve_id')) {
-                $eleve = Eleve::with('classe')->find($request->input('eleve_id'));
-                $ecoleId = $eleve?->classe?->ecole_id;
+            if ($request->input('eleve_id')) {
+                // Ensure eleve belongs to the school
+                $eleve = Eleve::with('classe')->where('id', $request->input('eleve_id'))->first();
+                if (!$eleve || $eleve->classe->ecole_id !== $ecoleId) {
+                    return response()->json(['error' => "Élève introuvable ou accès refusé."], 404);
+                }
             }
 
             $email = $request->input('email') ?: 'parent_' . time() . '_' . rand(1000, 9999) . '@carnet.local';
@@ -90,10 +97,11 @@ class ParentController extends Controller
         }
     }
 
-    public function getChildren(int $id)
+    public function getChildren(Request $request, int $id)
     {
         try {
-            $parent = ParentUser::findOrFail($id);
+            $ecole = $request->attributes->get('school');
+            $parent = ParentUser::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
             $today  = date('Y-m-d');
 
             $eleves = $parent->eleves()
@@ -169,7 +177,8 @@ class ParentController extends Controller
     public function update(Request $request, int $id)
     {
         try {
-            $parent = ParentUser::findOrFail($id);
+            $ecole = $request->attributes->get('school');
+            $parent = ParentUser::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
 
             $parent->update(array_filter([
                 'nom'       => $request->input('nom'),
@@ -182,6 +191,12 @@ class ParentController extends Controller
                 $eleveId = $request->input('eleve_id');
                 DB::table('eleve_parents')->where('parent_id', $id)->delete();
                 if ($eleveId) {
+                    // Ensure eleve belongs to the school
+                    $eleve = Eleve::with('classe')->where('id', $eleveId)->first();
+                    if (!$eleve || $eleve->classe->ecole_id !== $ecole->id) {
+                        return response()->json(['error' => "Élève introuvable ou accès refusé."], 404);
+                    }
+                    
                     $count = DB::table('eleve_parents')->where('eleve_id', $eleveId)->where('parent_id', '!=', $id)->count();
                     if ($count >= 3) {
                         return response()->json(['error' => "Cet élève a déjà 3 parents/tuteurs."], 400);
@@ -208,23 +223,27 @@ class ParentController extends Controller
         }
     }
 
-    public function destroy(int $id)
+    public function destroy(Request $request, int $id)
     {
         try {
+            $ecole = $request->attributes->get('school');
+            $parent = ParentUser::where('id', $id)->where('ecole_id', $ecole->id)->firstOrFail();
             DB::table('eleve_parents')->where('parent_id', $id)->delete();
-            ParentUser::findOrFail($id)->delete();
+            $parent->delete();
             return response()->json(['message' => 'Deleted']);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function getEvents(int $id)
+    public function getEvents(Request $request, int $id)
     {
+        $ecole = $request->attributes->get('school');
         $appointments = DB::table('appointments')
             ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
             ->where('appointments.parent_id', $id)
+            ->where('appointments.ecole_id', $ecole->id)
             ->whereIn('appointments.statut', ['en_attente', 'accepte'])
             ->select(
                 'appointments.*',

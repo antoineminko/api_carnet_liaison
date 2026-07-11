@@ -34,6 +34,14 @@ class ReportController extends Controller
             'evidence' => 'nullable|string',
         ]);
 
+        $ecoleId = $request->attributes->get('school')?->id;
+        if ($ecoleId) {
+            $conversation = Conversation::find($request->conversation_id);
+            if (!$conversation || $conversation->ecole_id != $ecoleId) {
+                return response()->json(['error' => 'Conversation non trouvée ou accès refusé'], 403);
+            }
+        }
+
         // Créer le signalement
         $report = Report::create([
             'conversation_id' => $request->conversation_id,
@@ -62,7 +70,15 @@ class ReportController extends Controller
      */
     public function index(Request $request)
     {
+        $ecoleId = $request->attributes->get('school')?->id;
+
         $query = Report::with(['conversation']);
+
+        if ($ecoleId) {
+            $query->whereHas('conversation', function($q) use ($ecoleId) {
+                $q->where('ecole_id', $ecoleId);
+            });
+        }
 
         // Filtrer par statut
         if ($request->has('status')) {

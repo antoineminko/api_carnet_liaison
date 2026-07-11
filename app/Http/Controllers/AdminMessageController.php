@@ -26,8 +26,10 @@ class AdminMessageController extends Controller
     // 1. Envoyer un message depuis l'Admin (appweb) vers un Parent, une Classe ou les parents d'un Élève
     public function sendMessageToParent(Request $request)
     {
+        $ecole = $request->attributes->get('school');
+        $ecoleId = $ecole->id;
+
         $validator = Validator::make($request->all(), [
-            'ecole_id'        => 'required|integer',
             'type'            => 'required|string',
             'content'         => 'required|string',
             'parent_id'       => 'nullable|integer',
@@ -65,7 +67,7 @@ class AdminMessageController extends Controller
         if ($request->filled('parent_id')) $cibles['parent_id'] = $request->parent_id;
 
         \App\Models\AdminBroadcast::create([
-            'ecole_id' => $request->ecole_id,
+            'ecole_id' => $ecoleId,
             'type' => $request->type ?? 'textual',
             'titre' => $request->titre ?? 'Information Administration',
             'contenu' => $content,
@@ -82,7 +84,7 @@ class AdminMessageController extends Controller
                 // Get all teachers from this school
                 $enseignantsList = DB::table('classe_enseignant')
                     ->join('classes', 'classe_enseignant.classe_id', '=', 'classes.id')
-                    ->where('classes.ecole_id', $request->ecole_id)
+                    ->where('classes.ecole_id', $ecoleId)
                     ->pluck('classe_enseignant.enseignant_id')
                     ->unique()
                     ->toArray();
@@ -98,7 +100,7 @@ class AdminMessageController extends Controller
             foreach ($enseignantsList as $ensId) {
                 $conversation = Conversation::firstOrCreate(
                     [
-                        'ecole_id'      => $request->ecole_id,
+                        'ecole_id'      => $ecoleId,
                         'enseignant_id' => $ensId,
                         'parent_id'     => null, // Conversation Admin ↔ Enseignant
                     ],
@@ -112,7 +114,7 @@ class AdminMessageController extends Controller
                 Message::create([
                     'conversation_id' => $conversation->id,
                     'sender_type'     => 'admin',
-                    'sender_id'       => $request->ecole_id,
+                    'sender_id'       => $ecoleId,
                     'content'         => $content,
                     'fichier_url'     => $fichierUrl,
                     'is_read'         => false,
@@ -137,7 +139,7 @@ class AdminMessageController extends Controller
         if ($request->filled('classe_id') || $request->filled('niveaux')) {
             $query = DB::table('eleves')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
-                ->where('classes.ecole_id', $request->ecole_id);
+                ->where('classes.ecole_id', $ecoleId);
             
             $query->where(function($q) use ($request) {
                 if ($request->filled('classe_id')) {
@@ -169,7 +171,7 @@ class AdminMessageController extends Controller
                 ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
                 ->where('eleve_parents.parent_id', $request->parent_id)
-                ->where('classes.ecole_id', $request->ecole_id)
+                ->where('classes.ecole_id', $ecoleId)
                 ->pluck('eleves.id')
                 ->unique()
                 ->toArray();
@@ -178,7 +180,7 @@ class AdminMessageController extends Controller
         else {
             $elevesList = DB::table('eleves')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
-                ->where('classes.ecole_id', $request->ecole_id)
+                ->where('classes.ecole_id', $ecoleId)
                 ->pluck('eleves.id')
                 ->toArray();
         }
@@ -199,7 +201,7 @@ class AdminMessageController extends Controller
         $allParentIds = $elevesParents->flatten()->pluck('parent_id')->unique()->toArray();
         $parentsData = ParentUser::whereIn('id', $allParentIds)->get()->keyBy('id');
 
-        $existingConversations = Conversation::where('ecole_id', $request->ecole_id)
+        $existingConversations = Conversation::where('ecole_id', $ecoleId)
             ->whereNull('enseignant_id')
             ->whereIn('parent_id', $allParentIds)
             ->get()
@@ -240,7 +242,7 @@ class AdminMessageController extends Controller
                         }
                     } else {
                         $conversation = Conversation::create([
-                            'ecole_id'      => $request->ecole_id,
+                            'ecole_id'      => $ecoleId,
                             'enseignant_id' => null,
                             'parent_id'     => $parentId,
                             'status'        => 'accepted'
@@ -251,7 +253,7 @@ class AdminMessageController extends Controller
                     $messagesData[] = [
                         'conversation_id' => $conversation->id,
                         'sender_type'     => 'admin',
-                        'sender_id'       => $request->ecole_id,
+                        'sender_id'       => $ecoleId,
                         'content'         => $content,
                         'fichier_url'     => $fichierUrl,
                         'is_read'         => false,
@@ -331,7 +333,7 @@ class AdminMessageController extends Controller
     // 2. Supervision des échanges Parent ↔ Enseignant
     public function getCommunications(Request $request)
     {
-        $ecole_id = $request->query('ecole_id');
+        $ecole_id = $request->attributes->get('school')->id;
 
         $conversations = DB::table('conversations')
             ->join('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
@@ -341,7 +343,7 @@ class AdminMessageController extends Controller
             ->join('classes', 'eleves.classe_id', '=', 'classes.id')
             ->join('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
             ->whereNotNull('conversations.enseignant_id')
-            ->when($ecole_id, fn($q) => $q->where('ecoles.id', $ecole_id))
+            ->where('ecoles.id', $ecole_id)
             ->where('conversations.status', 'accepted')
             ->select(
                 'conversations.id as conversation_id',
@@ -387,7 +389,7 @@ class AdminMessageController extends Controller
     // Récupérer les broadcasts (annonces) de l'Admin
     public function getAdminBroadcasts(Request $request)
     {
-        $ecole_id = $request->query('ecole_id');
+        $ecole_id = $request->attributes->get('school')->id;
         
         $broadcasts = \App\Models\AdminBroadcast::where('ecole_id', $ecole_id)
             ->orderBy('created_at', 'desc')
@@ -443,7 +445,7 @@ class AdminMessageController extends Controller
     // Récupérer les conversations où l'Admin est impliqué (Admin <-> Parent ou Admin <-> Enseignant)
     public function getAdminConversations(Request $request)
     {
-        $ecole_id = $request->query('ecole_id');
+        $ecole_id = $request->attributes->get('school')->id;
 
         // Admin <-> Parents
         $parentConversations = DB::table('conversations')
@@ -525,7 +527,6 @@ class AdminMessageController extends Controller
     {
         $request->validate([
             'content' => 'required|string',
-            'ecole_id'=> 'required|integer',
         ]);
 
         $conversation = Conversation::find($conversation_id);
@@ -533,10 +534,12 @@ class AdminMessageController extends Controller
             return response()->json(['success' => false, 'message' => 'Conversation introuvable'], 404);
         }
 
+        $ecoleId = $request->attributes->get('school')->id;
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'sender_type'     => 'admin',
-            'sender_id'       => $request->ecole_id,
+            'sender_id'       => $ecoleId,
             'content'         => $request->content,
             'is_read'         => false,
         ]);
