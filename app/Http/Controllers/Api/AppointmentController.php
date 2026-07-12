@@ -25,6 +25,17 @@ class AppointmentController extends Controller
      */
     public function store(Request $request)
     {
+        // Adaptation for Flutter app payload which uses 'type' and 'motif'
+        if (!$request->has('mode') && $request->has('type')) {
+            $mode = 'presentiel';
+            if ($request->type === 'video') $mode = 'video';
+            if ($request->type === 'vocal') $mode = 'vocal';
+            $request->merge(['mode' => $mode]);
+        }
+        if (!$request->has('objet') && $request->has('motif')) {
+            $request->merge(['objet' => $request->motif]);
+        }
+
         $request->validate([
             'enseignant_id' => 'required|integer',
             'parent_id'     => 'required|integer',
