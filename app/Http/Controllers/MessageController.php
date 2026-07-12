@@ -359,10 +359,17 @@ class MessageController extends Controller
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
                 if ($parent && !empty($parent->fcm_token)) {
-                    $this->notificationService->sendToToken($parent->fcm_token, $title, $body, [
-                        'conversation_id' => (string) $conversation->id,
-                        'type' => 'teacher_message'
-                    ]);
+                    $this->notificationService->sendAndSave(
+                        'parent',
+                        $parent->id,
+                        $parent->fcm_token,
+                        $title,
+                        $body,
+                        [
+                            'conversation_id' => (string) $conversation->id,
+                            'type' => 'teacher_message'
+                        ]
+                    );
                 }
             }
         }
@@ -373,10 +380,17 @@ class MessageController extends Controller
                 ->where('id', $conversation->enseignant_id)
                 ->first();
             if ($enseignant && !empty($enseignant->fcm_token)) {
-                $this->notificationService->sendToToken($enseignant->fcm_token, $title, $body, [
-                    'conversation_id' => (string) $conversation->id,
-                    'type' => 'parent_message'
-                ]);
+                $this->notificationService->sendAndSave(
+                    'enseignant',
+                    $enseignant->id,
+                    $enseignant->fcm_token,
+                    $title,
+                    $body,
+                    [
+                        'conversation_id' => (string) $conversation->id,
+                        'type' => 'parent_message'
+                    ]
+                );
             }
         }
 
@@ -428,6 +442,7 @@ class MessageController extends Controller
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
             ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
             ->where('conversations.enseignant_id', $enseignant_id)
+            ->whereNotNull('conversations.parent_id')
             ->select(
                 'conversations.id as conversation_id',
                 'conversations.parent_id',
