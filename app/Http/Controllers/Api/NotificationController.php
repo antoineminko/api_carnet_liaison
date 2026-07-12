@@ -50,6 +50,7 @@ class NotificationController extends Controller
 
         $notifications = \App\Models\Notification::where('user_type', $role)
             ->where('user_id', $user_id)
+            ->where('is_read', false)
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();
@@ -74,6 +75,21 @@ class NotificationController extends Controller
             }
         }
 
+        return response()->json(['success' => true]);
+    }
+
+    public function markAllRead(Request $request)
+    {
+        $userId = $request->input('user_id');
+        $role = $request->input('role');
+        
+        if ($userId && $role) {
+            \App\Models\Notification::where('user_type', $role)
+                ->where('user_id', $userId)
+                ->where('is_read', false)
+                ->update(['is_read' => true]);
+        }
+            
         return response()->json(['success' => true]);
     }
 

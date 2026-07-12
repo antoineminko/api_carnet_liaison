@@ -131,8 +131,9 @@ Route::get('/enseignants/student/{studentId}/info', [EnseignantDashboardControll
 
 // Notifications
 Route::post('/notifications/register-token', [NotificationController::class, 'registerToken']);
-Route::get('/users/{role}/{user_id}/notifications', [NotificationController::class, 'index']);
-Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::get('/users/{role}/{user_id}/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+    Route::put('/notifications/mark-all-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
+    Route::put('/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markAsRead']);
 Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::class, 'markAllReadForChild']);
 
 // Ping Online Status
