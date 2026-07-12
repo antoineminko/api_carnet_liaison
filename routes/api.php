@@ -135,6 +135,9 @@ Route::get('/users/{role}/{user_id}/notifications', [NotificationController::cla
 Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::class, 'markAllReadForChild']);
 
+// Ping Online Status
+Route::post('/ping', [\App\Http\Controllers\Api\PingController::class, 'ping']);
+
 
 // Messagerie, Appels, Signalements et Devoirs protégés par le contexte école
 Route::middleware(['school'])->group(function () {
@@ -145,7 +148,7 @@ Route::middleware(['school'])->group(function () {
     Route::post('/messages', [MessageController::class, 'sendMessage']);
 
     // Appels (Calls)
-    Route::post('/calls', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
+    Route::post('/calls/initiate', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
     Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
     Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
     Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);

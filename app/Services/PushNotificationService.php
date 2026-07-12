@@ -65,4 +65,12 @@ class PushNotificationService
 
         return $this->sendToToken($token, $title, $body, $data);
     }
+
+    /**
+     * Envoyer une notification push sans l'enregistrer en base de données.
+     */
+    public function sendPushOnly($token, $title, $body, $data = [])
+    {
+        return $this->sendToToken($token, $title, $body, $data);
+    }
 }

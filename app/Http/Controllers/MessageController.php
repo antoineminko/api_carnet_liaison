@@ -57,10 +57,24 @@ class MessageController extends Controller
 
         $messages = $conversation->messages()->orderBy('created_at', 'asc')->get();
 
+        $is_online = false;
+        if ($viewer_type === 'parent' && $conversation->enseignant_id) {
+            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
+            if ($enseignant && $enseignant->last_seen_at) {
+                $is_online = \Carbon\Carbon::parse($enseignant->last_seen_at)->diffInMinutes(\Carbon\Carbon::now()) <= 2;
+            }
+        } elseif ($viewer_type === 'enseignant' && $conversation->parent_id) {
+            $parent = \App\Models\ParentUser::find($conversation->parent_id);
+            if ($parent && $parent->last_seen_at) {
+                $is_online = \Carbon\Carbon::parse($parent->last_seen_at)->diffInMinutes(\Carbon\Carbon::now()) <= 2;
+            }
+        }
+
         return response()->json([
             'conversation_id' => $conversation->id,
             'status' => $conversation->status,
             'subject' => $conversation->subject,
+            'is_online' => $is_online,
             'messages' => $messages
         ]);
     }

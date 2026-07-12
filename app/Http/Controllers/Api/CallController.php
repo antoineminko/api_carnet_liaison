@@ -212,7 +212,7 @@ class CallController extends Controller
                         $callerName = $this->getCallerName($call);
                         $callType = $call->type === 'video' ? 'vidéo' : 'audio';
 
-                        $this->notificationService->sendAndSave(
+                        $this->notificationService->sendPushOnly(
                             'parent',
                             $parent->id,
                             $parent->fcm_token,
@@ -237,7 +237,7 @@ class CallController extends Controller
                         $callerName = $this->getCallerName($call);
                         $callType = $call->type === 'video' ? 'vidéo' : 'audio';
 
-                        $this->notificationService->sendAndSave(
+                        $this->notificationService->sendPushOnly(
                             'enseignant',
                             $enseignant->id,
                             $enseignant->fcm_token,
@@ -289,7 +289,7 @@ class CallController extends Controller
                     ? ($reason ?? 'L\'appel a été rejeté.')
                     : 'L\'appel n\'a pas été décroché.';
 
-                $this->notificationService->sendAndSave(
+                $this->notificationService->sendPushOnly(
                     'parent',
                     $parent->id,
                     $parent->fcm_token,
@@ -312,7 +312,7 @@ class CallController extends Controller
                     ? ($reason ?? 'L\'appel a été rejeté.')
                     : 'L\'appel n\'a pas été décroché.';
 
-                $this->notificationService->sendAndSave(
+                $this->notificationService->sendPushOnly(
                     'enseignant',
                     $enseignant->id,
                     $enseignant->fcm_token,
