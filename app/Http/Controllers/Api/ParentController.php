@@ -159,14 +159,19 @@ class ParentController extends Controller
                 return response()->json(['success' => false, 'error' => 'Code secret incorrect.'], 400);
             }
 
-            $updated = DB::table('eleve_parents')
+            $exists = DB::table('eleve_parents')
+                ->where('parent_id', $parentId)
+                ->where('eleve_id', $eleveId)
+                ->exists();
+
+            if (!$exists) {
+                return response()->json(['success' => false, 'error' => 'Liaison introuvable.'], 404);
+            }
+
+            DB::table('eleve_parents')
                 ->where('parent_id', $parentId)
                 ->where('eleve_id', $eleveId)
                 ->update(['is_verified' => true]);
-
-            if (!$updated) {
-                return response()->json(['success' => false, 'error' => 'Liaison introuvable.'], 404);
-            }
 
             return response()->json(['success' => true, 'message' => 'Enfant déverrouillé avec succès.']);
         } catch (\Exception $e) {
