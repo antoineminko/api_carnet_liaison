@@ -139,6 +139,18 @@ Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::c
 // Ping Online Status
 Route::post('/ping', [\App\Http\Controllers\Api\PingController::class, 'ping']);
 
+// Appels Actions (Ne nécessitent pas X-School-Code car l'ID de l'appel suffit)
+Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
+Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
+Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
+Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
+
+// Signaling WebRTC (Ne nécessite pas de X-School-Code car l'ID de l'appel suffit)
+Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
+Route::post('/calls/{callId}/answer', [\App\Http\Controllers\Api\CallController::class, 'storeAnswer']);
+Route::post('/calls/{callId}/ice-candidate', [\App\Http\Controllers\Api\CallController::class, 'storeIceCandidate']);
+Route::get('/calls/{callId}/signaling', [\App\Http\Controllers\Api\CallController::class, 'getSignaling']);
+
 
 // Messagerie, Appels, Signalements et Devoirs protégés par le contexte école
 Route::middleware(['school'])->group(function () {
@@ -150,17 +162,8 @@ Route::middleware(['school'])->group(function () {
 
     // Appels (Calls)
     Route::post('/calls/initiate', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
-    Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::class, 'accept']);
-    Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
-    Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
-    Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
     Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
 
-    // Signaling WebRTC
-    Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
-    Route::post('/calls/{callId}/answer', [\App\Http\Controllers\Api\CallController::class, 'storeAnswer']);
-    Route::post('/calls/{callId}/ice-candidate', [\App\Http\Controllers\Api\CallController::class, 'storeIceCandidate']);
-    Route::get('/calls/{callId}/signaling', [\App\Http\Controllers\Api\CallController::class, 'getSignaling']);
 
     // Signalements (Reports)
     Route::post('/reports', [\App\Http\Controllers\Api\ReportController::class, 'store']);

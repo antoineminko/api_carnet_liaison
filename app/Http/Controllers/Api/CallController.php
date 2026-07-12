@@ -213,8 +213,6 @@ class CallController extends Controller
                         $callType = $call->type === 'video' ? 'vidéo' : 'audio';
 
                         $this->notificationService->sendPushOnly(
-                            'parent',
-                            $parent->id,
                             $parent->fcm_token,
                             "📞 Appel {$callType} entrant",
                             "{$callerName} vous appelle...",
@@ -238,8 +236,6 @@ class CallController extends Controller
                         $callType = $call->type === 'video' ? 'vidéo' : 'audio';
 
                         $this->notificationService->sendPushOnly(
-                            'enseignant',
-                            $enseignant->id,
                             $enseignant->fcm_token,
                             "📞 Appel {$callType} entrant",
                             "{$callerName} vous appelle...",
@@ -290,8 +286,6 @@ class CallController extends Controller
                     : 'L\'appel n\'a pas été décroché.';
 
                 $this->notificationService->sendPushOnly(
-                    'parent',
-                    $parent->id,
                     $parent->fcm_token,
                     $title,
                     $body,
@@ -313,8 +307,6 @@ class CallController extends Controller
                     : 'L\'appel n\'a pas été décroché.';
 
                 $this->notificationService->sendPushOnly(
-                    'enseignant',
-                    $enseignant->id,
                     $enseignant->fcm_token,
                     $title,
                     $body,
