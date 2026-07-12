@@ -112,6 +112,7 @@ class AuthController extends Controller
                 'matiere'    => $teacher->matiere,
                 'ecole_id'   => $teacher->ecole_id,
                 'school_code'=> $teacher->ecole->code ?? null,
+                'ecole'      => $teacher->ecole,
                 'token'      => $currentToken,
             ];
         }
