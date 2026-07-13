@@ -34,7 +34,7 @@ class AdminMessageController extends Controller
             'content'         => 'required|string',
             'parent_id'       => 'nullable|integer',
             'classe_id'       => 'nullable',
-            'niveaux'         => 'nullable|array',
+            'niveaux'         => 'nullable',
             'eleve_id'        => 'nullable|integer',
             'enseignant_id'   => 'nullable|integer',
             'tous_enseignants'=> 'nullable|boolean',
