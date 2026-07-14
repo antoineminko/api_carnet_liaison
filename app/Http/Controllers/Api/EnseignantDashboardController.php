@@ -21,11 +21,9 @@ class EnseignantDashboardController extends Controller
         // Classes via prof_principal_id + via la table pivot classe_enseignant
         $classesPrincipal = Classe::with('ecole')
             ->where('prof_principal_id', $id)
-            ->select('classes.id', 'classes.nom', 'classes.ecole_id')
             ->get();
 
         $classesAssignees = $enseignant->classes()->with('ecole')
-            ->select('classes.id', 'classes.nom', 'classes.ecole_id')
             ->get();
 
         // Compter les élèves par classe en une seule requête
