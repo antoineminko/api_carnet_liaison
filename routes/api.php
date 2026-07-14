@@ -27,9 +27,11 @@ Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
 Route::post('/login/admin', [AuthController::class, 'loginAdmin']); // pas de school header requis car le mail est unique
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
-// Liaison — publiques (utilisées par app mobile parent)
-Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
-Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
+// Liaison — routes protégées par Sanctum (utilisées par app mobile parent)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/liaison/qr', [LiaisonController::class, 'linkWithQrCode']);
+    Route::post('/liaison/code', [LiaisonController::class, 'linkWithSecretCode']);
+});
 
 // Ecoles — routes publiques (aucun middleware school requis)
 Route::get('/ecoles', [EcoleController::class, 'index']);

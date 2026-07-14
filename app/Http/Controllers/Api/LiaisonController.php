@@ -13,8 +13,8 @@ class LiaisonController extends Controller
     public function linkWithSecretCode(Request $request)
     {
         $request->validate([
-            'code_secret' => 'required|string',
-            'parent_id' => 'required|integer'
+            'code_secret' => 'required|string'
+            // 'parent_id' n'est plus requis ici, la sécurité Sanctum nous le donne de manière infaillible.
         ]);
 
         $eleve = Eleve::where('code_secret', $request->code_secret)->first();
@@ -26,13 +26,14 @@ class LiaisonController extends Controller
             ], 404);
         }
 
-        $parent = ParentUser::find($request->parent_id);
+        // Clean Architecture : On récupère le parent depuis son token de connexion sécurisé
+        $parent = clone $request->user();
         
         if (!$parent) {
             return response()->json([
                 'success' => false,
-                'message' => 'Parent introuvable.'
-            ], 404);
+                'message' => 'Parent introuvable ou session expirée.'
+            ], 401);
         }
 
         // Check if already linked
