@@ -52,9 +52,10 @@ class AuthController extends Controller
                 'prenom'     => $parent->prenom,
                 'email'      => $parent->email,
                 'telephone'  => $parent->telephone,
-                'ecole_id'   => $parent->ecole_id,
-                'school_code'=> $parent->ecole->code ?? null,
-                'nb_enfants' => $parent->eleves()->count(),
+                'ecole_id'      => $parent->ecole_id,
+                'school_code'   => $parent->ecole->code ?? null,
+                'school_acronym'=> $parent->ecole->acronyme ?? null,
+                'nb_enfants'    => $parent->eleves()->count(),
                 'token'      => $currentToken,
             ];
         }
