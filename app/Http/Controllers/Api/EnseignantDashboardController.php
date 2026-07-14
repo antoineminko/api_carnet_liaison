@@ -108,21 +108,21 @@ class EnseignantDashboardController extends Controller
     public function getEvents(int $id)
     {
         $appointments = DB::table('appointments')
-            ->leftJoin('parents', 'appointments.parent_id', '=', 'parents.id')
+            ->leftJoin('parent_users', 'appointments.parent_id', '=', 'parent_users.id')
             ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
             ->where('appointments.enseignant_id', $id)
             ->whereIn('appointments.statut', ['en_attente', 'accepte'])
             ->select(
                 'appointments.*',
-                'parents.nom as parent_nom',
-                'parents.prenom as parent_prenom',
+                'parent_users.nom as parent_nom',
+                'parent_users.prenom as parent_prenom',
                 'eleves.nom as eleve_nom',
                 'eleves.prenom as eleve_prenom'
             )
             ->get();
 
         $conversations = DB::table('conversations')
-            ->leftJoin('parents', 'conversations.parent_id', '=', 'parents.id')
+            ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.enseignant_id', $id)
             ->whereIn('conversations.status', ['pending', 'accepted', 'rejected'])
@@ -133,8 +133,8 @@ class EnseignantDashboardController extends Controller
             )
             ->select(
                 'conversations.*',
-                'parents.nom as parent_nom',
-                'parents.prenom as parent_prenom',
+                'parent_users.nom as parent_nom',
+                'parent_users.prenom as parent_prenom',
                 'ecoles.nom as ecole_nom'
             )
             ->get();
