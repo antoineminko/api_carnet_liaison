@@ -18,27 +18,18 @@ class EnseignantDashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Enseignant non trouvé'], 404);
         }
 
-        // Classes via prof_principal_id + via la table pivot classe_enseignant
-        $classesPrincipal = Classe::with('ecole')
-            ->where('prof_principal_id', $id)
-            ->get();
-
-        $classesAssignees = $enseignant->classes()->with('ecole')
+        // On récupère TOUTES les classes de l'école de l'enseignant
+        $allClassesQuery = Classe::with('ecole')
+            ->where('ecole_id', $enseignant->ecole_id)
             ->get();
 
         // Compter les élèves par classe en une seule requête
-        $allClasseIds = $classesPrincipal->pluck('id')
-            ->concat($classesAssignees->pluck('id'))
-            ->unique();
-
-        $studentCounts = Eleve::whereIn('classe_id', $allClasseIds)
+        $studentCounts = Eleve::whereIn('classe_id', $allClassesQuery->pluck('id'))
             ->select('classe_id', DB::raw('COUNT(*) as students_count'))
             ->groupBy('classe_id')
             ->pluck('students_count', 'classe_id');
 
-        $allClasses = $classesPrincipal->concat($classesAssignees)
-            ->unique('id')
-            ->map(fn ($c) => [
+        $allClasses = $allClassesQuery->map(fn ($c) => [
                 'id'             => $c->id,
                 'classe_nom'     => $c->nom,
                 'ecole_nom'      => $c->ecole?->nom,
