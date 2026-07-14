@@ -58,7 +58,7 @@ class LiaisonController extends Controller
 
         return response()->json([
             'success' => false,
-            'message' => "Vous n'êtes pas autorisé car vous n'êtes pas identifié à ce compte. Contactez l'administration."
+            'message' => "Vous n'êtes pas autorisé car vous n'êtes pas identifié à ce compte. Contactez l'administration. (Debug: eleve={$eleve->id}, auth_parent={$parent->id})"
         ], 403);
     }
 
