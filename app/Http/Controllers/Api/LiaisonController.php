@@ -64,10 +64,8 @@ class LiaisonController extends Controller
 
     public function linkWithQrCode(Request $request)
     {
-        $request->validate([
-            'parent_id' => 'required|integer'
-        ]);
-
+        // Plus besoin de valider parent_id
+        
         $request->merge([
             'code_secret' => $request->input('qr_data') ?? $request->input('qr_code')
         ]);
