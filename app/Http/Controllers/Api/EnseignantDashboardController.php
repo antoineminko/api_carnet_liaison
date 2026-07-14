@@ -106,4 +106,45 @@ class EnseignantDashboardController extends Controller
             'parents' => $parents,
         ]);
     }
+
+    public function getEvents(int $id)
+    {
+        $appointments = DB::table('appointments')
+            ->leftJoin('parents', 'appointments.parent_id', '=', 'parents.id')
+            ->leftJoin('eleves', 'appointments.eleve_id', '=', 'eleves.id')
+            ->where('appointments.enseignant_id', $id)
+            ->whereIn('appointments.statut', ['en_attente', 'accepte'])
+            ->select(
+                'appointments.*',
+                'parents.nom as parent_nom',
+                'parents.prenom as parent_prenom',
+                'eleves.nom as eleve_nom',
+                'eleves.prenom as eleve_prenom'
+            )
+            ->get();
+
+        $conversations = DB::table('conversations')
+            ->leftJoin('parents', 'conversations.parent_id', '=', 'parents.id')
+            ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
+            ->where('conversations.enseignant_id', $id)
+            ->whereIn('conversations.status', ['pending', 'accepted', 'rejected'])
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('messages')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->where('messages.sender_type', '!=', 'teacher')
+            )
+            ->select(
+                'conversations.*',
+                'parents.nom as parent_nom',
+                'parents.prenom as parent_prenom',
+                'ecoles.nom as ecole_nom'
+            )
+            ->get();
+
+        return response()->json([
+            'success'       => true,
+            'appointments'  => $appointments,
+            'conversations' => $conversations,
+        ]);
+    }
 }
