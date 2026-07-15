@@ -191,8 +191,9 @@ Route::middleware(['school'])->group(function () {
     });
     Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
     Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
-    Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 });
+
+Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
 
 // Protected routes
 Route::get('/user', function (Request $request) {

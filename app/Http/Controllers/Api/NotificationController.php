@@ -24,14 +24,21 @@ class NotificationController extends Controller
             $parent = ParentUser::find($request->parent_id);
             if ($parent) {
                 // Update all parent profiles for this user (same email/telephone)
-                ParentUser::where(function ($query) use ($parent) {
-                    if (!empty($parent->email)) {
-                        $query->orWhere('email', $parent->email);
-                    }
-                    if (!empty($parent->telephone)) {
-                        $query->orWhere('telephone', $parent->telephone);
-                    }
-                })->update(['fcm_token' => $request->token]);
+                ParentUser::where('id', $parent->id)
+                    ->orWhere(function ($query) use ($parent) {
+                        $hasCondition = false;
+                        if (!empty($parent->email)) {
+                            $query->orWhere('email', $parent->email);
+                            $hasCondition = true;
+                        }
+                        if (!empty($parent->telephone)) {
+                            $query->orWhere('telephone', $parent->telephone);
+                            $hasCondition = true;
+                        }
+                        if (!$hasCondition) {
+                            $query->whereRaw('1 = 0'); // Failsafe
+                        }
+                    })->update(['fcm_token' => $request->token]);
             }
         }
 
