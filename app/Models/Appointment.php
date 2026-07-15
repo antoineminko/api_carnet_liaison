@@ -17,13 +17,13 @@ class Appointment extends Model
         'objet',
         'date_heure',
         'new_proposed_date',
-        'type', // 'physique' ou 'video' (legacy)
-        'mode', // 'presentiel', 'vocal', 'video'
+        'type',
+        'mode', 
         'lien_video',
-        'statut', // 'en_attente', 'accepte', 'refuse', 'reporte'
+        'statut', 
         'motif',
         'report_reason',
-        'requester', // 'parent' ou 'enseignant'
+        'requester', 
     ];
 
     public function enseignant()
