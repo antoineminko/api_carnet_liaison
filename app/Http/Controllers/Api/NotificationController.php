@@ -89,7 +89,7 @@ class NotificationController extends Controller
         }
         $notifications = \App\Models\Notification::where('user_type', $role)
             ->whereIn('user_id', $userIds)
-            ->where('is_read', false)
+            ->where('created_at', '>=', now()->subDays(7))
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();

@@ -116,6 +116,7 @@ class ParentController extends Controller
                     $notifCount = DB::table('admin_informations')
                         ->where('eleve_id', $eleve->id)
                         ->where('is_read', false)
+                        ->where('created_at', '>=', now()->subDays(7))
                         ->count();
 
                     $photoUrl = $eleve->photo
