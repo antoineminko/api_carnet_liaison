@@ -23,8 +23,15 @@ class NotificationController extends Controller
         if ($request->has('parent_id') && $request->parent_id) {
             $parent = ParentUser::find($request->parent_id);
             if ($parent) {
-                $parent->fcm_token = $request->token;
-                $parent->save();
+                // Update all parent profiles for this user (same email/telephone)
+                ParentUser::where(function ($query) use ($parent) {
+                    if (!empty($parent->email)) {
+                        $query->orWhere('email', $parent->email);
+                    }
+                    if (!empty($parent->telephone)) {
+                        $query->orWhere('telephone', $parent->telephone);
+                    }
+                })->update(['fcm_token' => $request->token]);
             }
         }
 
@@ -48,8 +55,24 @@ class NotificationController extends Controller
             return response()->json(['success' => false, 'error' => 'Rôle invalide'], 400);
         }
 
+        $userIds = [$user_id];
+        
+        if ($role === 'parent') {
+            $parent = ParentUser::find($user_id);
+            if ($parent) {
+                $userIds = ParentUser::where(function ($query) use ($parent) {
+                    if (!empty($parent->email)) {
+                        $query->orWhere('email', $parent->email);
+                    }
+                    if (!empty($parent->telephone)) {
+                        $query->orWhere('telephone', $parent->telephone);
+                    }
+                })->pluck('id')->toArray();
+            }
+        }
+
         $notifications = \App\Models\Notification::where('user_type', $role)
-            ->where('user_id', $user_id)
+            ->whereIn('user_id', $userIds)
             ->where('is_read', false)
             ->orderBy('created_at', 'desc')
             ->limit(50)
@@ -84,8 +107,23 @@ class NotificationController extends Controller
         $role = $request->input('role');
         
         if ($userId && $role) {
+            $userIds = [$userId];
+            if ($role === 'parent') {
+                $parent = ParentUser::find($userId);
+                if ($parent) {
+                    $userIds = ParentUser::where(function ($query) use ($parent) {
+                        if (!empty($parent->email)) {
+                            $query->orWhere('email', $parent->email);
+                        }
+                        if (!empty($parent->telephone)) {
+                            $query->orWhere('telephone', $parent->telephone);
+                        }
+                    })->pluck('id')->toArray();
+                }
+            }
+
             \App\Models\Notification::where('user_type', $role)
-                ->where('user_id', $userId)
+                ->whereIn('user_id', $userIds)
                 ->where('is_read', false)
                 ->update(['is_read' => true]);
         }
@@ -109,8 +147,21 @@ class NotificationController extends Controller
 
         // Marquer aussi les notifications API liées à cet élève comme lues
         if ($parentId) {
+            $userIds = [$parentId];
+            $parent = ParentUser::find($parentId);
+            if ($parent) {
+                $userIds = ParentUser::where(function ($query) use ($parent) {
+                    if (!empty($parent->email)) {
+                        $query->orWhere('email', $parent->email);
+                    }
+                    if (!empty($parent->telephone)) {
+                        $query->orWhere('telephone', $parent->telephone);
+                    }
+                })->pluck('id')->toArray();
+            }
+
             $notifications = \App\Models\Notification::where('user_type', 'parent')
-                ->where('user_id', $parentId)
+                ->whereIn('user_id', $userIds)
                 ->where('is_read', false)
                 ->get();
 

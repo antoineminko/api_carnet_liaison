@@ -266,7 +266,7 @@ class AdminMessageController extends Controller
                     $parentIdsSet[] = $parentId;
                     $parent = $parentsData->get($parentId);
                     
-                    if ($parent && !empty($parent->fcm_token)) {
+                    if ($parent) {
                         $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
                         $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
 
@@ -281,7 +281,7 @@ class AdminMessageController extends Controller
 
                         if ($request->type === 'textual' && isset($conversation)) {
                             $notificationData['conversation_id'] = (string) $conversation->id;
-                        } elseif ($adminInfo) {
+                        } elseif (isset($adminInfo)) {
                             $notificationData['admin_info_id'] = (string) $adminInfo->id;
                         }
 
