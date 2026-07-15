@@ -88,7 +88,7 @@ class EleveDashboardController extends Controller
             ->leftJoin('devoir_eleve', 'devoirs.id', '=', 'devoir_eleve.devoir_id')
             ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
             ->where('devoirs.classe_id', $eleve->classe_id)
-            ->where('devoirs.date_remise', '>=', $today)
+            ->where('devoirs.date_remise', '>=', date('Y-m-d', strtotime('-30 days')))
             ->where(function ($query) use ($id) {
                 $query->whereNull('devoir_eleve.eleve_id')
                       ->orWhere('devoir_eleve.eleve_id', $id);

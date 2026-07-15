@@ -200,9 +200,10 @@ class IncidentController extends Controller
             foreach ($parentLinks as $parentLink) {
                 $parent = \App\Models\ParentUser::find($parentLink->parent_id);
                 
-                if ($parent && !empty($parent->fcm_token)) {
-                    \Log::info('Envoi notification au parent ' . $parent->id . ' - Token: ' . substr($parent->fcm_token, 0, 20) . '...');
-                    $result = $notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                if ($parent) {
+                    $token = $parent->fcm_token ?? '';
+                    \Log::info('Envoi notification au parent ' . $parent->id . ' - Token: ' . substr($token, 0, 20) . '...');
+                    $dataPayload = [
                         'eleve_id' => (string)$eleve->id,
                         'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
                         'type' => 'incident',
@@ -211,10 +212,19 @@ class IncidentController extends Controller
                         'enseignant_nom' => trim($enseignant->prenom . ' ' . $enseignant->nom),
                         'matiere' => $enseignant->matiere ?? '',
                         'date' => $incident->date->format('Y-m-d')
-                    ]);
+                    ];
+                    
+                    $result = $notificationService->sendAndSave(
+                        'parent',
+                        $parent->id,
+                        $token,
+                        $title,
+                        $body,
+                        $dataPayload
+                    );
                     \Log::info('Résultat notification: ' . json_encode($result));
                 } else {
-                    \Log::warning('Parent ' . ($parent->id ?? 'N/A') . ' sans FCM token');
+                    \Log::warning('Parent introuvable pour ce lien parentLink.');
                 }
             }
         } catch (\Exception $e) {

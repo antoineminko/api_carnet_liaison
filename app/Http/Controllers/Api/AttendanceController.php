@@ -61,7 +61,7 @@ class AttendanceController extends Controller
                     
                     foreach ($parentLinks as $parentLink) {
                         $parent = ParentUser::find($parentLink->parent_id);
-                        if ($parent && !empty($parent->fcm_token)) {
+                        if ($parent) {
                             $prenomNom = trim($eleve->prenom . ' ' . $eleve->nom);
                             $statusFr = 'présent';
                             if ($status === 'absent') $statusFr = 'absent';
@@ -75,7 +75,8 @@ class AttendanceController extends Controller
                                 
                             try {
                                 $notificationService = app(PushNotificationService::class);
-                                $notificationService->sendToToken($parent->fcm_token, $title, $body, [
+                                $token = $parent->fcm_token ?? '';
+                                $notificationService->sendAndSave('parent', $parent->id, $token, $title, $body, [
                                     'eleve_id'   => (string)$eleveId,
                                     'child_name' => $prenomNom,
                                     'ecole_nom'  => $ecoleNom ?? '',
