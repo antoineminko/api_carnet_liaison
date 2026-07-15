@@ -18,7 +18,8 @@ class EleveController extends Controller
                 ->where('classes.ecole_id', $ecole->id)
                 ->select(
                     'eleves.*',
-                    'classes.nom as classe_nom'
+                    'classes.nom as classe_nom',
+                    DB::raw('(SELECT COUNT(*) FROM eleve_parents WHERE eleve_parents.eleve_id = eleves.id) as nb_parents_lies')
                 )
                 ->get();
 

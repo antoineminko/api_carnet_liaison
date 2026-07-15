@@ -107,6 +107,7 @@ Route::middleware(['school'])->group(function () {
     Route::get('/parents/{id}/events', [ParentController::class, 'getEvents']);
     // Liaison admin — nécessite le contexte école (X-School-Code)
     Route::post('/admin/parents/link-child', [LiaisonController::class, 'adminLinkChild']);
+    Route::post('/admin/parents/unlink-child', [LiaisonController::class, 'adminUnlinkChild']);
 });
 
 Route::get('/parents/{id}/conversations', [MessageController::class, 'getConversationsForParent']);

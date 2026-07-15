@@ -153,6 +153,35 @@ class LiaisonController extends Controller
                 ? "$linkedCount enfant(s) lié(s) avec succès." . (count($errors) > 0 ? " (" . implode(' ', $errors) . ")" : "")
                 : "Les enfants sélectionnés sont déjà liés à ce parent."
         ]);
+    public function adminUnlinkChild(Request $request)
+    {
+        $request->validate([
+            'eleve_id' => 'required|integer',
+            'parent_id' => 'required|integer'
+        ]);
+
+        $ecole = $request->attributes->get('school');
+        $ecoleId = $ecole?->id;
+
+        $parent = \App\Models\ParentUser::where('id', $request->parent_id)
+            ->where('ecole_id', $ecoleId)
+            ->first();
+
+        if (!$parent) {
+            return response()->json(['error' => 'Parent introuvable ou accès refusé.'], 403);
+        }
+
+        $eleve = Eleve::where('id', $request->eleve_id)->first();
+        if (!$eleve || $eleve->classe->ecole_id !== $ecoleId) {
+             return response()->json(['error' => 'Élève introuvable.'], 403);
+        }
+
+        DB::table('eleve_parents')
+            ->where('parent_id', $request->parent_id)
+            ->where('eleve_id', $request->eleve_id)
+            ->delete();
+
+        return response()->json(['success' => true]);
     }
 
 }
