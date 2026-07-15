@@ -210,6 +210,7 @@ class AdminMessageController extends Controller
         $messagesData = [];
         $conversationsToUpdate = [];
         $now = now();
+        $processedParentsForTextual = [];
 
         foreach ($elevesList as $eleveId) {
             $adminInfo = null;
@@ -234,32 +235,36 @@ class AdminMessageController extends Controller
                 $parentId = $pivot->parent_id;
 
                 if ($request->type === 'textual') {
-                    if ($existingConversations->has($parentId)) {
-                        $conversation = $existingConversations->get($parentId);
-                        if ($conversation->status !== 'accepted') {
-                            $conversationsToUpdate[] = $conversation->id;
-                            $conversation->status = 'accepted';
+                    if (!in_array($parentId, $processedParentsForTextual)) {
+                        if ($existingConversations->has($parentId)) {
+                            $conversation = $existingConversations->get($parentId);
+                            if ($conversation->status !== 'accepted') {
+                                $conversationsToUpdate[] = $conversation->id;
+                                $conversation->status = 'accepted';
+                            }
+                        } else {
+                            $conversation = Conversation::create([
+                                'ecole_id'      => $ecoleId,
+                                'enseignant_id' => null,
+                                'parent_id'     => $parentId,
+                                'status'        => 'accepted'
+                            ]);
+                            $existingConversations->put($parentId, $conversation);
                         }
-                    } else {
-                        $conversation = Conversation::create([
-                            'ecole_id'      => $ecoleId,
-                            'enseignant_id' => null,
-                            'parent_id'     => $parentId,
-                            'status'        => 'accepted'
-                        ]);
-                        $existingConversations->put($parentId, $conversation);
-                    }
 
-                    $messagesData[] = [
-                        'conversation_id' => $conversation->id,
-                        'sender_type'     => 'admin',
-                        'sender_id'       => $ecoleId,
-                        'content'         => $content,
-                        'fichier_url'     => $fichierUrl,
-                        'is_read'         => false,
-                        'created_at'      => $now,
-                        'updated_at'      => $now,
-                    ];
+                        $messagesData[] = [
+                            'conversation_id' => $conversation->id,
+                            'sender_type'     => 'admin',
+                            'sender_id'       => $ecoleId,
+                            'content'         => $content,
+                            'fichier_url'     => $fichierUrl,
+                            'is_read'         => false,
+                            'created_at'      => $now,
+                            'updated_at'      => $now,
+                        ];
+                        
+                        $processedParentsForTextual[] = $parentId;
+                    }
                 }
 
                 if (!in_array($parentId, $parentIdsSet)) {
@@ -272,15 +277,18 @@ class AdminMessageController extends Controller
 
                         $notificationData = [
                             'type' => $request->type === 'textual' ? 'admin_message' : 'admin_info',
-                            'eleve_id' => (string) $eleveId,
                         ];
+
+                        if ($request->type !== 'textual') {
+                            $notificationData['eleve_id'] = (string) $eleveId;
+                        }
 
                         if ($fichierUrl) {
                             $notificationData['fichier_url'] = $fichierUrl;
                         }
 
-                        if ($request->type === 'textual' && isset($conversation)) {
-                            $notificationData['conversation_id'] = (string) $conversation->id;
+                        if ($request->type === 'textual' && isset($existingConversations[$parentId])) {
+                            $notificationData['conversation_id'] = (string) $existingConversations[$parentId]->id;
                         } elseif (isset($adminInfo)) {
                             $notificationData['admin_info_id'] = (string) $adminInfo->id;
                         }

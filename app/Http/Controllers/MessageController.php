@@ -285,20 +285,18 @@ class MessageController extends Controller
                 // Notifier l'expéditeur du premier message que sa demande a été acceptée
                 if ($senderWasEnseignant) {
                     // L'enseignant avait initié, on notifie l'enseignant que le parent a accepté
-                    // (mais l'enseignant sait déjà qu'il a envoyé le message, donc on pourrait ne pas notifier)
-                    // On notifie plutôt le parent que la conversation est active
                     $parent = ParentUser::find($conversation->parent_id);
                     $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
                         ->where('id', $conversation->enseignant_id)
                         ->first();
-                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
-                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
+                    if ($enseignant && !empty($enseignant->fcm_token) && $parent) {
+                        $parentName = trim("{$parent->prenom} {$parent->nom}");
                         $this->notificationService->sendAndSave(
-                            'parent',
-                            $parent->id,
-                            $parent->fcm_token,
+                            'enseignant',
+                            $enseignant->id,
+                            $enseignant->fcm_token,
                             "✅ Liaison acceptée",
-                            "Vous pouvez maintenant discuter avec {$enseignantName}.",
+                            "{$parentName} a accepté votre demande de discussion.",
                             [
                                 'type' => 'chat_accepted',
                                 'conversation_id' => (string)$conversation->id,

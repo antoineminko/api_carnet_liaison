@@ -111,13 +111,9 @@ class ParentController extends Controller
                     $attendance = DB::table('attendances')
                         ->where('eleve_id', $eleve->id)
                         ->where('date', $today)
+                        ->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id')
+                        ->select('attendances.*', 'enseignants.matiere as matiere', 'enseignants.nom as enseignant_nom')
                         ->first();
-
-                    $notifCount = DB::table('admin_informations')
-                        ->where('eleve_id', $eleve->id)
-                        ->where('is_read', false)
-                        ->where('created_at', '>=', now()->subDays(7))
-                        ->count();
 
                     $photoUrl = $eleve->photo
                         ? rtrim(env('APP_URL'), '/') . '/storage/' . $eleve->photo
@@ -138,7 +134,8 @@ class ParentController extends Controller
                         'is_verified'       => $eleve->pivot->is_verified,
                         'attendance_status' => $attendance?->status,
                         'arrival_time'      => $attendance?->created_at,
-                        'notif_count'       => $notifCount,
+                        'matiere'           => $attendance?->matiere,
+                        'notif_count'       => 0,
                     ];
                 });
 
