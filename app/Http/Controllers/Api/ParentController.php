@@ -111,8 +111,6 @@ class ParentController extends Controller
                     $attendance = DB::table('attendances')
                         ->where('eleve_id', $eleve->id)
                         ->where('date', $today)
-                        ->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id')
-                        ->select('attendances.*', 'enseignants.matiere as matiere', 'enseignants.nom as enseignant_nom')
                         ->first();
 
                     $photoUrl = $eleve->photo
@@ -134,7 +132,7 @@ class ParentController extends Controller
                         'is_verified'       => $eleve->pivot->is_verified,
                         'attendance_status' => $attendance?->status,
                         'arrival_time'      => $attendance?->created_at,
-                        'matiere'           => $attendance?->matiere,
+                        'matiere'           => null,
                         'notif_count'       => 0,
                     ];
                 });
