@@ -135,8 +135,12 @@ class AdminMessageController extends Controller
         // Récupérer les élèves concernés au lieu de juste les parents, pour les admin_informations
         $elevesList = [];
 
-        // Cas 1 : Envoi à une classe entière ou plusieurs classes, ou par niveaux
-        if ($request->filled('classe_id') || $request->filled('niveaux')) {
+        // Cas 1 : Envoi à un élève spécifique
+        if ($request->filled('eleve_id')) {
+            $elevesList = [$request->eleve_id];
+        }
+        // Cas 2 : Envoi à une classe entière ou plusieurs classes, ou par niveaux
+        elseif ($request->filled('classe_id') || $request->filled('niveaux')) {
             $query = DB::table('eleves')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
                 ->where('classes.ecole_id', $ecoleId);
@@ -160,10 +164,6 @@ class AdminMessageController extends Controller
             });
 
             $elevesList = $query->pluck('eleves.id')->unique()->toArray();
-        }
-        // Cas 2 : Envoi à un élève spécifique
-        elseif ($request->filled('eleve_id')) {
-            $elevesList = [$request->eleve_id];
         }
         // Cas 3 : Envoi à un parent unique (on récupère tous ses enfants dans l'école)
         elseif ($request->filled('parent_id')) {

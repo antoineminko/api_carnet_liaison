@@ -63,21 +63,30 @@ class NotificationController extends Controller
         }
 
         $userIds = [$user_id];
-        
         if ($role === 'parent') {
             $parent = ParentUser::find($user_id);
             if ($parent) {
-                $userIds = ParentUser::where(function ($query) use ($parent) {
-                    if (!empty($parent->email)) {
-                        $query->orWhere('email', $parent->email);
-                    }
-                    if (!empty($parent->telephone)) {
-                        $query->orWhere('telephone', $parent->telephone);
-                    }
-                })->pluck('id')->toArray();
+                $userIds = ParentUser::where('id', $parent->id)
+                    ->orWhere(function ($query) use ($parent) {
+                        $hasCondition = false;
+                        if (!empty($parent->email)) {
+                            $query->orWhere('email', $parent->email);
+                            $hasCondition = true;
+                        }
+                        if (!empty($parent->telephone)) {
+                            $query->orWhere('telephone', $parent->telephone);
+                            $hasCondition = true;
+                        }
+                        if (!empty($parent->fcm_token)) {
+                            $query->orWhere('fcm_token', $parent->fcm_token);
+                            $hasCondition = true;
+                        }
+                        if (!$hasCondition) {
+                            $query->whereRaw('1 = 0');
+                        }
+                    })->pluck('id')->toArray();
             }
         }
-
         $notifications = \App\Models\Notification::where('user_type', $role)
             ->whereIn('user_id', $userIds)
             ->where('is_read', false)
@@ -118,14 +127,25 @@ class NotificationController extends Controller
             if ($role === 'parent') {
                 $parent = ParentUser::find($userId);
                 if ($parent) {
-                    $userIds = ParentUser::where(function ($query) use ($parent) {
-                        if (!empty($parent->email)) {
-                            $query->orWhere('email', $parent->email);
-                        }
-                        if (!empty($parent->telephone)) {
-                            $query->orWhere('telephone', $parent->telephone);
-                        }
-                    })->pluck('id')->toArray();
+                    $userIds = ParentUser::where('id', $parent->id)
+                        ->orWhere(function ($query) use ($parent) {
+                            $hasCondition = false;
+                            if (!empty($parent->email)) {
+                                $query->orWhere('email', $parent->email);
+                                $hasCondition = true;
+                            }
+                            if (!empty($parent->telephone)) {
+                                $query->orWhere('telephone', $parent->telephone);
+                                $hasCondition = true;
+                            }
+                            if (!empty($parent->fcm_token)) {
+                                $query->orWhere('fcm_token', $parent->fcm_token);
+                                $hasCondition = true;
+                            }
+                            if (!$hasCondition) {
+                                $query->whereRaw('1 = 0');
+                            }
+                        })->pluck('id')->toArray();
                 }
             }
 
