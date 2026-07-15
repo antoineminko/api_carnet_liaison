@@ -153,6 +153,8 @@ class LiaisonController extends Controller
                 ? "$linkedCount enfant(s) lié(s) avec succès." . (count($errors) > 0 ? " (" . implode(' ', $errors) . ")" : "")
                 : "Les enfants sélectionnés sont déjà liés à ce parent."
         ]);
+    }
+
     public function adminUnlinkChild(Request $request)
     {
         $request->validate([
