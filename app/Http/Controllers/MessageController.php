@@ -353,11 +353,18 @@ class MessageController extends Controller
             return response()->json(['error' => 'Conversation non acceptée'], 403);
         }
 
+        $fichierUrl = null;
+        if ($request->hasFile('fichier')) {
+            $path = $request->file('fichier')->store('communications', 'public');
+            $fichierUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
+        }
+
         $message = Message::create([
             'conversation_id' => $request->conversation_id,
             'sender_type' => $request->sender_type,
             'sender_id' => $request->sender_id,
             'content' => $request->content,
+            'fichier_url' => $fichierUrl,
             'is_read' => false
         ]);
 

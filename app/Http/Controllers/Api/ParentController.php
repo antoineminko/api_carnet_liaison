@@ -108,7 +108,7 @@ class ParentController extends Controller
                 ->with(['classe.ecole'])
                 ->get()
                 ->map(function ($eleve) use ($id, $today) {
-                    $attendance = DB::table('attendances')
+                    $attendance = clone DB::table('attendances')
                         ->where('eleve_id', $eleve->id)
                         ->where('date', $today)
                         ->first();
@@ -116,6 +116,12 @@ class ParentController extends Controller
                     $photoUrl = $eleve->photo
                         ? rtrim(env('APP_URL'), '/') . '/storage/' . $eleve->photo
                         : null;
+
+                    $notifCount = \App\Models\Notification::where('user_type', 'parent')
+                        ->where('user_id', $id)
+                        ->where('is_read', false)
+                        ->where('data->eleve_id', (string)$eleve->id)
+                        ->count();
 
                     return [
                         'id'                => $eleve->id,
@@ -133,7 +139,7 @@ class ParentController extends Controller
                         'attendance_status' => $attendance?->status,
                         'arrival_time'      => $attendance?->created_at,
                         'matiere'           => null,
-                        'notif_count'       => 0,
+                        'notif_count'       => $notifCount,
                     ];
                 });
 
