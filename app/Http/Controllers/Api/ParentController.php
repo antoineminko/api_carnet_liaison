@@ -105,7 +105,7 @@ class ParentController extends Controller
             $today  = date('Y-m-d');
 
             $eleves = $parent->eleves()
-                ->with(['classe.ecole'])
+                ->with(['classe.ecole', 'classe.profPrincipal'])
                 ->get()
                 ->map(function ($eleve) use ($id, $today) {
                     $attendance = clone DB::table('attendances')
@@ -123,20 +123,8 @@ class ParentController extends Controller
                         ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
                         ->count();
 
-                    $latestNotif = DB::table('notifications')
-                        ->where('user_type', 'parent')
-                        ->where('user_id', $id)
-                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.type')) = ?", ['attendance_alert'])
-                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
-                        ->whereDate('created_at', $today)
-                        ->orderBy('created_at', 'desc')
-                        ->first();
-
-                    $matiere = null;
-                    if ($latestNotif) {
-                        $dataArr = json_decode($latestNotif->data, true);
-                        $matiere = $dataArr['matiere'] ?? null;
-                    }
+                    // Matière du professeur principal (même logique que l'aperçu enfant)
+                    $matiere = $eleve->classe?->profPrincipal?->matiere ?? null;
 
                     return [
                         'id'                => $eleve->id,

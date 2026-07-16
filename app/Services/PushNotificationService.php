@@ -54,7 +54,7 @@ class PushNotificationService
     public function sendAndSave($userType, $userId, $token, $title, $body, $data = [])
     {
         // Enregistrer en base
-        \App\Models\Notification::create([
+        $notification = \App\Models\Notification::create([
             'user_type' => $userType,
             'user_id' => $userId,
             'type' => $data['type'] ?? 'general',
@@ -62,6 +62,8 @@ class PushNotificationService
             'message' => $body,
             'data' => $data,
         ]);
+
+        $data['notification_id'] = (string) $notification->id;
 
         return $this->sendToToken($token, $title, $body, $data);
     }
