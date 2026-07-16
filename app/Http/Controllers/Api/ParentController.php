@@ -108,7 +108,7 @@ class ParentController extends Controller
                 ->with(['classe.ecole', 'classe.profPrincipal'])
                 ->get()
                 ->map(function ($eleve) use ($id, $today) {
-                    $attendance = clone DB::table('attendances')
+                    $attendance = DB::table('attendances')
                         ->where('eleve_id', $eleve->id)
                         ->where('date', $today)
                         ->first();
