@@ -82,7 +82,10 @@ class AttendanceController extends Controller
                                     'ecole_nom'  => $ecoleNom ?? '',
                                     'type'       => 'attendance_alert',
                                     'status'     => (string)$status,
-                                    'matiere'    => auth('sanctum')->user() ? (auth('sanctum')->user()->matiere ?? '') : '',
+                                    'matiere'    => DB::table('classe_enseignant')
+                                        ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                                        ->where('classe_enseignant.classe_id', $classeId)
+                                        ->value('enseignants.matiere') ?? '',
                                 ]);
                             } catch (\Throwable $e) {
                                 \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
