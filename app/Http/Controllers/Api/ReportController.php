@@ -245,7 +245,7 @@ class ReportController extends Controller
     private function notifyReporter(Report $report, string $status)
     {
         try {
-            $title = $status === 'resolved' ? '✅ Signalement résolu' : '❌ Signalement rejeté';
+            $title = $status === 'resolved' ? ' Signalement résolu' : ' Signalement rejeté';
             $body = $status === 'resolved'
                 ? "Votre signalement (#{$report->id}) a été traité et résolu."
                 : "Votre signalement (#{$report->id}) a été rejeté après examen.";

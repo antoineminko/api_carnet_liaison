@@ -120,8 +120,26 @@ class ParentController extends Controller
                     $notifCount = \App\Models\Notification::where('user_type', 'parent')
                         ->where('user_id', $id)
                         ->where('is_read', false)
-                        ->where('data->eleve_id', (string)$eleve->id)
+                        ->where(function($query) use ($eleve) {
+                            $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
+                                  ->orWhereNull('data->eleve_id');
+                        })
                         ->count();
+
+                    $latestNotif = DB::table('notifications')
+                        ->where('user_type', 'parent')
+                        ->where('user_id', $id)
+                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.type')) = ?", ['attendance_alert'])
+                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
+                        ->whereDate('created_at', $today)
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+
+                    $matiere = null;
+                    if ($latestNotif) {
+                        $dataArr = json_decode($latestNotif->data, true);
+                        $matiere = $dataArr['matiere'] ?? null;
+                    }
 
                     return [
                         'id'                => $eleve->id,
@@ -138,7 +156,7 @@ class ParentController extends Controller
                         'is_verified'       => $eleve->pivot->is_verified,
                         'attendance_status' => $attendance?->status,
                         'arrival_time'      => $attendance?->created_at,
-                        'matiere'           => null,
+                        'matiere'           => $matiere,
                         'notif_count'       => $notifCount,
                     ];
                 });

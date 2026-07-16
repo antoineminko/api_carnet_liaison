@@ -82,6 +82,7 @@ class AttendanceController extends Controller
                                     'ecole_nom'  => $ecoleNom ?? '',
                                     'type'       => 'attendance_alert',
                                     'status'     => (string)$status,
+                                    'matiere'    => $request->user() ? ($request->user()->matiere ?? '') : '',
                                 ]);
                             } catch (\Throwable $e) {
                                 \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
