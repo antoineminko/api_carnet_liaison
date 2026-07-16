@@ -371,9 +371,7 @@ class MessageController extends Controller
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
                 if ($parent && !empty($parent->fcm_token)) {
-                    $this->notificationService->sendAndSave(
-                        'parent',
-                        $parent->id,
+                    $this->notificationService->sendPushOnly(
                         $parent->fcm_token,
                         $title,
                         $body,
@@ -392,9 +390,7 @@ class MessageController extends Controller
                 ->where('id', $conversation->enseignant_id)
                 ->first();
             if ($enseignant && !empty($enseignant->fcm_token)) {
-                $this->notificationService->sendAndSave(
-                    'enseignant',
-                    $enseignant->id,
+                $this->notificationService->sendPushOnly(
                     $enseignant->fcm_token,
                     $title,
                     $body,

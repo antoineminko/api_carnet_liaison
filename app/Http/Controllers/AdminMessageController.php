@@ -272,7 +272,13 @@ class AdminMessageController extends Controller
                     $parent = $parentsData->get($parentId);
                     
                     if ($parent) {
-                        $title = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
+                        $title = "Nouveau message de l'Administration";
+                        if ($request->filled('titre')) {
+                            $title = $request->titre;
+                        } elseif ($request->type === 'finance') {
+                            $title = "Nouvelle information financière";
+                        }
+                        
                         $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
 
                         $notificationData = [
@@ -293,7 +299,11 @@ class AdminMessageController extends Controller
                             $notificationData['admin_info_id'] = (string) $adminInfo->id;
                         }
 
-                        $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
+                        if ($request->type === 'textual') {
+                            $this->notificationService->sendPushOnly($parent->fcm_token, $title, $body, $notificationData);
+                        } else {
+                            $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
+                        }
                     }
 
                     if ($parent && !empty($parent->email)) {
