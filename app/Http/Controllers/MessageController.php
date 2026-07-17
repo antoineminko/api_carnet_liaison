@@ -435,7 +435,7 @@ class MessageController extends Controller
                 'eleves.nom as eleve_nom',
                 'eleves.prenom as eleve_prenom',
                 'classes.nom as classe_nom',
-                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != "parent" AND messages.is_read = false) as unread_count')
+                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != "parent" AND messages.is_read = 0) as unread_count')
             )
             ->groupBy(
                 'conversations.id', 'conversations.ecole_id', 'conversations.enseignant_id',
