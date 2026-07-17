@@ -59,6 +59,11 @@ class IncidentController extends Controller
             $enseignant = Enseignant::find($request->enseignant_id);
             $typeLabel = Incident::getTypeLabel($request->type);
 
+            // FIX: Map the request type to allowed enum types to prevent DB error in production
+            $allowedEnumTypes = ['desordre', 'bavardage', 'bagarre', 'injure', 'retenu', 'autre'];
+            $dbType = in_array($request->type, $allowedEnumTypes) ? $request->type : 'autre';
+            $descriptionPrefix = !in_array($request->type, $allowedEnumTypes) ? "[$typeLabel] " : "";
+
             $elevesAndIncidents = [];
 
             foreach ($elevesIds as $eleveId) {
@@ -67,8 +72,8 @@ class IncidentController extends Controller
                     'eleve_id' => $eleveId,
                     'enseignant_id' => $request->enseignant_id,
                     'classe_id' => $request->classe_id,
-                    'type' => $request->type,
-                    'description' => $request->description,
+                    'type' => $dbType,
+                    'description' => trim($descriptionPrefix . $request->description),
                     'date' => $request->date,
                     'is_read' => false
                 ]);
