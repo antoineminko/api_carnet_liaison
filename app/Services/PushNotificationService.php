@@ -16,15 +16,6 @@ class PushNotificationService
         $this->messaging = $messaging;
     }
 
-    /**
-     * Envoyer une notification push à un token donné.
-     *
-     * @param string $token Le FCM token du destinataire
-     * @param string $title Titre de la notification
-     * @param string $body Corps de la notification
-     * @param array $data Données additionnelles
-     * @return bool
-     */
     public function sendToToken($token, $title, $body, $data = [])
     {
         if (empty($token)) {
@@ -32,25 +23,10 @@ class PushNotificationService
             return false;
         }
 
-        \Log::info('[Push] sendToToken: envoi vers token=' . substr($token, 0, 20) . '... title=' . $title);
+        \Log::info('[Push] sendToToken: dispatching job vers token=' . substr($token, 0, 20) . '... title=' . $title);
 
-        try {
-            $notification = Notification::create($title, $body);
-
-            // Firebase FCM exige que toutes les valeurs dans "data" soient des chaînes de caractères (string).
-            $stringifiedData = array_map('strval', $data);
-
-            $message = CloudMessage::withTarget('token', $token)
-                ->withNotification($notification)
-                ->withData($stringifiedData);
-
-            $this->messaging->send($message);
-            \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
-            return true;
-        } catch (\Exception $e) {
-            \Log::error('[Push] Erreur Push Notification: ' . $e->getMessage() . ' | Token: ' . substr($token, 0, 20) . '...');
-            return false;
-        }
+        \App\Jobs\SendPushNotificationJob::dispatch($token, $title, $body, $data);
+        return true;
     }
 
     /**

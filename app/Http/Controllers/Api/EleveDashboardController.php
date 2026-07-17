@@ -76,12 +76,45 @@ class EleveDashboardController extends Controller
         }
 
         // 3. Notes (Notes de la semaine et Historique)
-        // MOCK : Simulation des notes car la table 'notes' n'est pas encore créée
-        $grades = [
-            // ['matiere' => 'Mathématiques', 'note' => '15/20', 'date' => date('Y-m-d', strtotime('-1 day'))],
-            // Décommenter pour simuler des notes, laisser vide sinon ("Aucune note")
-        ];
-        $grades_history = []; // Historique complet
+        $gradesRaw = DB::table('notes')
+            ->join('devoirs', 'notes.devoir_id', '=', 'devoirs.id')
+            ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
+            ->where('notes.eleve_id', $id)
+            ->select(
+                'notes.valeur as note',
+                'notes.trimestre',
+                'devoirs.matiere',
+                'devoirs.titre',
+                'devoirs.date_remise as date',
+                'enseignants.nom as prof_nom',
+                'enseignants.prenom as prof_prenom',
+                'enseignants.id as enseignant_id'
+            )
+            ->orderBy('devoirs.date_remise', 'desc')
+            ->get();
+
+        $grades = $gradesRaw->map(function($g) {
+            $isBad = false;
+            // logic for < 5/20 or < 3/10
+            $val = floatval(str_replace(',', '.', $g->note));
+            if (str_contains($g->note, '/10')) {
+                if ($val < 3) $isBad = true;
+            } else {
+                if ($val < 5) $isBad = true; // /20 by default
+            }
+
+            return [
+                'matiere' => $g->matiere,
+                'note' => $g->note,
+                'titre' => $g->titre,
+                'date' => $g->date,
+                'teacher' => trim(($g->prof_prenom ?? '') . ' ' . ($g->prof_nom ?? '')),
+                'enseignant_id' => $g->enseignant_id,
+                'isBad' => $isBad,
+            ];
+        })->toArray();
+
+        $grades_history = $grades; // Historique complet
         
         // 4. Devoirs à venir (filtrer selon ciblage spécifique ou classe entière)
         $homeworksRaw = DB::table('devoirs')

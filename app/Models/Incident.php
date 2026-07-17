@@ -52,12 +52,17 @@ class Incident extends Model
     public static function getTypeLabel($type)
     {
         $labels = [
-            'desordre' => 'Désordre en classe',
-            'bavardage' => 'Bavardage excessif',
-            'bagarre' => 'Bagarre',
-            'injure' => 'Injure/Insulte',
-            'retenu' => 'Retenu en classe',
-            'autre' => 'Autre incident'
+            'retard_repete' => 'Retard répété',
+            'absence_injustifiee' => 'Absence injustifiée',
+            'indiscipline' => 'Indiscipline',
+            'violence' => 'Violence',
+            'insolence' => 'Insolence',
+            'non_respect' => 'Non-respect du règlement',
+            'devoirs_non_faits' => 'Devoirs non réalisés',
+            'telephone' => 'Téléphone en classe',
+            'degradation' => 'Dégradation du matériel',
+            'perturbation' => 'Perturbation du cours',
+            'autre' => 'Autre (avec description)'
         ];
         return $labels[$type] ?? $type;
     }

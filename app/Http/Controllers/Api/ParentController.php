@@ -119,7 +119,7 @@ class ParentController extends Controller
 
                     $notifCount = \App\Models\Notification::where('user_type', 'parent')
                         ->where('user_id', $id)
-                        ->where('is_read', false)
+                        ->where('is_read', 0)
                         ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
                         ->count();
 

@@ -46,6 +46,59 @@ class CallController extends Controller
             : $conversation->enseignant_id;
         $receiverType = $request->caller_type === 'enseignant' ? 'parent' : 'enseignant';
 
+        // --- DEBUT CONTROLE SECURITE & PRESENCE ---
+        $isAvailable = true;
+
+        if ($request->caller_type === 'parent') {
+            // Parent -> Enseignant : on check si l'enseignant est connecté à cette école
+            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $receiverId)->first();
+            if (!$enseignant) {
+                $isAvailable = false;
+            } else {
+                // Vérifier s'il est actif dans cette école depuis moins de 2 minutes
+                $lastSeen = $enseignant->last_seen_at ? \Carbon\Carbon::parse($enseignant->last_seen_at) : null;
+                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 2;
+                if (!$isActive || $enseignant->active_ecole_id != $conversation->ecole_id) {
+                    $isAvailable = false;
+                }
+            }
+        } else {
+            // Enseignant -> Parent : on check juste si le parent est actif (< 2 mins)
+            $parent = ParentUser::find($receiverId);
+            if (!$parent) {
+                $isAvailable = false;
+            } else {
+                $lastSeen = $parent->last_seen_at ? \Carbon\Carbon::parse($parent->last_seen_at) : null;
+                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 2;
+                if (!$isActive) {
+                    $isAvailable = false;
+                }
+            }
+        }
+
+        if (!$isAvailable) {
+            $call = Call::create([
+                'conversation_id' => $request->conversation_id,
+                'caller_id' => $request->caller_id,
+                'caller_type' => $request->caller_type,
+                'receiver_id' => $receiverId,
+                'receiver_type' => $receiverType,
+                'type' => $request->type,
+                'status' => $request->caller_type === 'parent' ? 'unavailable' : 'missed',
+            ]);
+
+            if ($request->caller_type === 'enseignant') {
+                $this->sendCallNotification($call, 'missed');
+            }
+
+            return response()->json([
+                'success' => false,
+                'call' => $call,
+                'message' => 'Le correspondant est indisponible.',
+            ], 200);
+        }
+        // --- FIN CONTROLE SECURITE & PRESENCE ---
+
         // Créer l'appel
         $call = Call::create([
             'conversation_id' => $request->conversation_id,
@@ -318,6 +371,64 @@ class CallController extends Controller
                 );
             }
         }
+    }
+
+    /**
+     * Historique global des appels pour un utilisateur
+     */
+    public function history(Request $request)
+    {
+        $request->validate([
+            'role' => 'required|in:parent,enseignant',
+            'user_id' => 'required|integer',
+        ]);
+
+        $role = $request->role;
+        $userId = $request->user_id;
+
+        $calls = Call::with('conversation')
+            ->where(function ($query) use ($userId, $role) {
+                $query->where(function ($q) use ($userId, $role) {
+                    $q->where('caller_id', $userId)->where('caller_type', $role);
+                })->orWhere(function ($q) use ($userId, $role) {
+                    $q->where('receiver_id', $userId)->where('receiver_type', $role);
+                });
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $calls->transform(function ($call) use ($userId, $role) {
+            $otherType = ($call->caller_type === $role && $call->caller_id == $userId) 
+                ? $call->receiver_type 
+                : $call->caller_type;
+            
+            $otherId = ($call->caller_type === $role && $call->caller_id == $userId) 
+                ? $call->receiver_id 
+                : $call->caller_id;
+
+            $name = 'Utilisateur';
+            if ($otherType === 'enseignant') {
+                $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $otherId)->first();
+                if ($enseignant) {
+                    $name = trim("{$enseignant->prenom} {$enseignant->nom}");
+                }
+            } else {
+                $parent = ParentUser::find($otherId);
+                if ($parent) {
+                    $name = trim("{$parent->prenom} {$parent->nom}");
+                }
+            }
+            
+            $call->other_name = $name;
+            $call->other_type = $otherType;
+            $call->is_incoming = !($call->caller_type === $role && $call->caller_id == $userId);
+            return $call;
+        });
+
+        return response()->json([
+            'success' => true,
+            'calls' => $calls,
+        ]);
     }
 
     // ==================== SIGNALING WEBRTC ====================

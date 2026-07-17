@@ -66,7 +66,16 @@ class AppointmentController extends Controller
             $lien_video = "https://meet.jit.si/" . $roomName;
         }
 
+        // Trouver l'ecole_id
+        $ecole_id = null;
+        if ($request->has('ecole_id')) {
+            $ecole_id = $request->ecole_id;
+        } elseif ($eleve && $eleve->classe) {
+            $ecole_id = $eleve->classe->ecole_id;
+        }
+
         $appointment = Appointment::create([
+            'ecole_id'      => $ecole_id,
             'enseignant_id' => $request->enseignant_id,
             'parent_id'     => $request->parent_id,
             'eleve_id'      => $request->eleve_id,
@@ -97,6 +106,7 @@ class AppointmentController extends Controller
                     'mode' => $request->mode,
                     'enseignant_nom' => $enseignantNom,
                     'eleve_nom' => $eleve ? "{$eleve->prenom} {$eleve->nom}" : null,
+                    'ecole_id' => (string)$ecole_id,
                     'statut' => 'en_attente'
                 ]);
             }
@@ -116,6 +126,7 @@ class AppointmentController extends Controller
                     'mode' => $request->mode,
                     'parent_nom' => $parentNom,
                     'eleve_nom' => $eleve ? "{$eleve->prenom} {$eleve->nom}" : null,
+                    'ecole_id' => (string)$ecole_id,
                     'statut' => 'en_attente'
                 ]);
             }

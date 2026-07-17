@@ -23,7 +23,7 @@ class DevoirController extends Controller
         $request->validate([
             'classe_id' => 'required|integer',
             'matiere' => 'required|string',
-            'type' => 'required|in:maison,classe,exercice',
+            'type' => 'required|in:maison,classe,exercice,recherche,revision,autre',
             'titre' => 'required|string',
             'description' => 'required|string',
             'date_remise' => 'required|date',
@@ -82,20 +82,28 @@ class DevoirController extends Controller
             ->get();
 
         $sentCount = 0;
-        foreach ($targets as $target) {
-            $parent = ParentUser::find($target->parent_id);
-            if ($parent && !empty($parent->fcm_token)) {
-                // Adapter le titre selon le type
-                $typeLabels = [
-                    'maison' => 'Devoir de maison',
-                    'classe' => 'Devoir de classe',
-                    'exercice' => 'Exercice'
-                ];
-                $typeLabel = $typeLabels[$request->type] ?? 'Devoir';
-                
-                $title = "{$typeLabel} - {$request->matiere}";
-                $body = "{$request->titre}\nÀ rendre pour le " . date('d/m/Y', strtotime($request->date_remise));
+        
+        // Grouper les cibles par parent_id
+        $parentsGrouped = collect($targets)->groupBy('parent_id');
 
+        $typeLabels = [
+            'maison' => 'Devoir de maison',
+            'classe' => 'Devoir de classe',
+            'exercice' => 'Exercice',
+            'recherche' => 'Recherche',
+            'revision' => 'Révision',
+            'autre' => 'Autre'
+        ];
+        $typeLabel = $typeLabels[$request->type] ?? 'Devoir';
+        $title = "{$typeLabel} - {$request->matiere}";
+        $body = "{$request->titre}\nÀ rendre pour le " . date('d/m/Y', strtotime($request->date_remise));
+
+        foreach ($parentsGrouped as $parentId => $children) {
+            $parent = ParentUser::find($parentId);
+            if (!$parent) continue;
+
+            // Enregistrer une notification par enfant dans la base de données
+            foreach ($children as $childTarget) {
                 $data = [
                     'devoir_id' => (string) $devoir->id,
                     'type' => 'new_homework',
@@ -104,18 +112,35 @@ class DevoirController extends Controller
                     'matiere' => $request->matiere,
                     'titre' => $request->titre,
                     'date_remise' => $request->date_remise,
-                    'eleve_id' => (string) $target->eleve_id,
-                    'eleve_nom' => trim(($target->eleve_prenom ?? '') . ' ' . ($target->eleve_nom ?? '')),
+                    'eleve_id' => (string) $childTarget->eleve_id,
+                    'eleve_nom' => trim(($childTarget->eleve_prenom ?? '') . ' ' . ($childTarget->eleve_nom ?? '')),
                 ];
 
-                // Enregistrer la notification en base + envoyer le push
-                $this->notificationService->sendAndSave(
-                    'parent',
-                    $target->parent_id,
+                \App\Models\Notification::create([
+                    'user_type' => 'parent',
+                    'user_id' => $parentId,
+                    'type' => 'new_homework',
+                    'title' => $title,
+                    'message' => $body,
+                    'data' => $data,
+                ]);
+            }
+
+            // Envoyer un seul push FCM pour le parent
+            if (!empty($parent->fcm_token)) {
+                $pushBody = count($children) > 1 
+                    ? "Nouveau devoir disponible pour vos enfants."
+                    : "Nouveau devoir disponible pour " . trim($children->first()->eleve_prenom ?? '');
+
+                $this->notificationService->sendPushOnly(
                     $parent->fcm_token,
                     $title,
-                    $body,
-                    $data
+                    $pushBody,
+                    [
+                        'type' => 'new_homework_group',
+                        'classe_id' => (string) $request->classe_id,
+                        'matiere' => $request->matiere,
+                    ]
                 );
                 $sentCount++;
             }

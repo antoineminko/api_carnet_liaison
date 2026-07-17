@@ -135,7 +135,8 @@ class EnseignantDashboardController extends Controller
                 'conversations.*',
                 'parent_users.nom as parent_nom',
                 'parent_users.prenom as parent_prenom',
-                'ecoles.nom as ecole_nom'
+                'ecoles.nom as ecole_nom',
+                DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != \'teacher\' AND messages.is_read = 0) as unread_count')
             )
             ->get();
 

@@ -35,4 +35,23 @@ return [
         ],
     ],
 
+    'ai' => [
+        'default' => env('AI_PROVIDER', 'gemini'),
+        'gemini' => [
+            'key' => env('GEMINI_API_KEY'),
+        ],
+        'openai' => [
+            'key' => env('OPENAI_API_KEY'),
+        ],
+        'claude' => [
+            'key' => env('CLAUDE_API_KEY'),
+        ],
+        'azure' => [
+            'key' => env('AZURE_OPENAI_API_KEY'),
+            'endpoint' => env('AZURE_OPENAI_ENDPOINT'),
+            'deployment' => env('AZURE_OPENAI_DEPLOYMENT_NAME'),
+            'api_version' => env('AZURE_OPENAI_API_VERSION', '2023-05-15'),
+        ],
+    ],
+
 ];

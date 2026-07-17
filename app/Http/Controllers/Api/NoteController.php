@@ -33,6 +33,7 @@ class NoteController extends Controller
             'notes' => 'required|array',
             'notes.*.eleve_id' => 'required|exists:eleves,id',
             'notes.*.note' => 'required|numeric|min:0|max:20',
+            'notes.*.commentaires' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -42,10 +43,12 @@ class NoteController extends Controller
         try {
             DB::beginTransaction();
 
+            $enseignantId = auth()->id() ?? 1;
+
             // 1. Create the Devoir (acts as Evaluation metadata)
             $devoir = Devoir::create([
                 'classe_id' => $request->classe_id,
-                'enseignant_id' => 1, // Defaulting to 1 for API tests
+                'enseignant_id' => $enseignantId,
                 'matiere' => $request->matiere,
                 'titre' => $request->titre . ' (' . $request->numero . ')',
                 'description' => 'Évaluation du ' . $request->trimestre,
@@ -53,7 +56,7 @@ class NoteController extends Controller
                 'date_remise' => $request->date ?? date('Y-m-d'),
             ]);
 
-            $sentCount = 0;
+            $targets = collect();
 
             // 2. Insert the notes
             foreach ($request->notes as $noteData) {
@@ -62,6 +65,7 @@ class NoteController extends Controller
                     'eleve_id' => $noteData['eleve_id'],
                     'valeur' => $noteData['note'],
                     'trimestre' => $request->trimestre,
+                    'commentaires' => $noteData['commentaires'] ?? null,
                 ]);
 
                 // Attach to devoir_eleve pivot
@@ -73,7 +77,7 @@ class NoteController extends Controller
                     'updated_at' => now(),
                 ]);
 
-                // Find parents and notify them
+                // Find parents for this child
                 $parentIds = DB::table('eleve_parents')
                                ->where('eleve_id', $noteData['eleve_id'])
                                ->pluck('parent_id');
@@ -81,28 +85,58 @@ class NoteController extends Controller
                 $eleve = DB::table('eleves')->where('id', $noteData['eleve_id'])->first();
 
                 foreach ($parentIds as $parentId) {
-                    $parent = ParentUser::find($parentId);
-                    if ($parent && !empty($parent->fcm_token)) {
-                        $title = "Nouvelle Note : {$request->matiere}";
-                        $body = "Une note a été publiée pour " . ($eleve->prenom ?? 'votre enfant') . ".\nÉvaluation: {$request->titre}";
+                    $targets->push([
+                        'parent_id' => $parentId,
+                        'eleve_id' => $noteData['eleve_id'],
+                        'eleve_nom' => $eleve->prenom ?? 'votre enfant',
+                    ]);
+                }
+            }
 
-                        $data = [
+            // 3. Group targets by parent to send 1 push per parent
+            $groupedTargets = $targets->groupBy('parent_id');
+            $sentCount = 0;
+
+            foreach ($groupedTargets as $parentId => $childrenTargets) {
+                $parent = ParentUser::find($parentId);
+                if (!$parent) continue;
+
+                // Save individual notifications in DB for each child so badges increment per child
+                foreach ($childrenTargets as $childTarget) {
+                    \App\Models\Notification::create([
+                        'user_type' => 'parent',
+                        'user_id' => $parentId,
+                        'title' => "Nouvelle Note : {$request->matiere}",
+                        'body' => "Une note a été publiée pour " . $childTarget['eleve_nom'] . ".\nÉvaluation: {$request->titre}",
+                        'data' => json_encode([
                             'type' => 'new_grade',
                             'devoir_id' => (string) $devoir->id,
-                            'eleve_id' => (string) $noteData['eleve_id'],
+                            'eleve_id' => (string) $childTarget['eleve_id'],
                             'matiere' => $request->matiere,
-                        ];
+                        ]),
+                        'is_read' => false,
+                    ]);
+                }
 
-                        $this->notificationService->sendAndSave(
-                            'parent',
-                            $parentId,
-                            $parent->fcm_token,
-                            $title,
-                            $body,
-                            $data
-                        );
-                        $sentCount++;
-                    }
+                // Send 1 push notification per parent
+                if (!empty($parent->fcm_token)) {
+                    $title = "Nouvelles évaluations : {$request->matiere}";
+                    
+                    $pushBody = count($childrenTargets) > 1 
+                        ? "Les résultats scolaires de vos enfants sont disponibles.\nÉvaluation: {$request->titre}"
+                        : "Les résultats scolaires de " . $childrenTargets->first()['eleve_nom'] . " sont disponibles.\nÉvaluation: {$request->titre}";
+
+                    $this->notificationService->sendPushOnly(
+                        $parent->fcm_token,
+                        $title,
+                        $pushBody,
+                        [
+                            'type' => 'new_grade_group',
+                            'classe_id' => (string) $request->classe_id,
+                            'matiere' => $request->matiere,
+                        ]
+                    );
+                    $sentCount++;
                 }
             }
 

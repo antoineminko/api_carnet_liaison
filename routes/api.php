@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\EnseignantDashboardController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\DevoirController;
+use App\Http\Controllers\Api\CahierTexteController;
 use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\IncidentController;
@@ -80,8 +81,11 @@ Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
     return $controller->submitAttendance($req);
 });
 
-// Devoirs
+// Devoirs & Cahier de Textes
 Route::post('/devoirs', [DevoirController::class, 'store']);
+Route::post('/cahier-textes', [CahierTexteController::class, 'store']);
+Route::get('/eleves/{eleveId}/cahier-textes', [CahierTexteController::class, 'getByEleve']);
+Route::post('/ai/summarize', [\App\Http\Controllers\Api\AiController::class, 'summarize']);
 Route::get('/enseignants/{teacherId}/classes', [DevoirController::class, 'getTeacherClasses']);
 Route::get('/classes/{classeId}/eleves-devoirs', [DevoirController::class, 'getClassStudents']);
 
@@ -166,6 +170,7 @@ Route::middleware(['school'])->group(function () {
     // Appels (Calls)
     Route::post('/calls/initiate', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
     Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
+    Route::get('/calls/history', [\App\Http\Controllers\Api\CallController::class, 'history']);
 
 
     // Signalements (Reports)

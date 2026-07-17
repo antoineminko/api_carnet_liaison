@@ -21,9 +21,19 @@ class PingController extends Controller
 
         $table = $request->role === 'parent' ? 'parent_users' : 'enseignants';
         
+        $updateData = ['last_seen_at' => Carbon::now()];
+
+        if ($request->role === 'enseignant' && $request->hasHeader('X-School-Code')) {
+            $schoolCode = $request->header('X-School-Code');
+            $ecole = DB::table('ecoles')->where('code', $schoolCode)->first();
+            if ($ecole) {
+                $updateData['active_ecole_id'] = $ecole->id;
+            }
+        }
+        
         DB::table($table)
             ->where('id', $request->user_id)
-            ->update(['last_seen_at' => Carbon::now()]);
+            ->update($updateData);
 
         return response()->json(['success' => true]);
     }

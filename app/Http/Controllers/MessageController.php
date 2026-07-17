@@ -158,7 +158,8 @@ class MessageController extends Controller
                             'enseignant_nom' => $enseignantName,
                             'subject' => $conversation->subject,
                             'status' => 'pending',
-                            'action' => 'validate_conversation' // Le parent doit valider la liaison
+                            'action' => 'validate_conversation', // Le parent doit valider la liaison
+                            'sent_at' => now()->timestamp
                         ]
                     );
                 }
@@ -187,7 +188,8 @@ class MessageController extends Controller
                             'parent_nom' => $parentName,
                             'subject' => $conversation->subject,
                             'status' => 'pending',
-                            'action' => 'validate_conversation' // L'enseignant doit valider la liaison
+                            'action' => 'validate_conversation', // L'enseignant doit valider la liaison
+                            'sent_at' => now()->timestamp
                         ]
                     );
                 }
@@ -231,102 +233,74 @@ class MessageController extends Controller
     private function sendConversationStatusNotification($conversation, $status)
     {
         try {
-            $firstMessage = $conversation->messages()->orderBy('created_at', 'asc')->first();
-            if (!$firstMessage) return;
+            $parent = ParentUser::find($conversation->parent_id);
+            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                ->where('id', $conversation->enseignant_id)
+                ->first();
 
-            $senderWasEnseignant = $firstMessage->sender_type === 'enseignant';
+            if (!$parent || !$enseignant) return;
+
+            $parentName = trim("{$parent->prenom} {$parent->nom}");
+            $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
 
             if ($status === 'rejected') {
-                // Notifier l'expéditeur du premier message que sa demande a été refusée
-                if ($senderWasEnseignant) {
-                    // L'enseignant avait initié, on notifie l'enseignant que le parent a refusé
-                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
-                        ->where('id', $conversation->enseignant_id)
-                        ->first();
-                    if ($enseignant && !empty($enseignant->fcm_token)) {
-                        $parent = ParentUser::find($conversation->parent_id);
-                        $parentName = $parent ? trim("{$parent->prenom} {$parent->nom}") : "Le parent";
-                        $this->notificationService->sendAndSave(
-                            'enseignant',
-                            $enseignant->id,
-                            $enseignant->fcm_token,
-                            "❌ Liaison refusée",
-                            "{$parentName} a refusé d'établir une discussion avec vous.",
-                            [
-                                'type' => 'chat_rejected',
-                                'conversation_id' => (string)$conversation->id,
-                                'status' => 'rejected'
-                            ]
-                        );
-                    }
-                } else {
-                    // Le parent avait initié, on notifie le parent que l'enseignant a refusé
-                    $parent = ParentUser::find($conversation->parent_id);
-                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
-                        ->where('id', $conversation->enseignant_id)
-                        ->first();
-                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
-                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
-                        $this->notificationService->sendAndSave(
-                            'parent',
-                            $parent->id,
-                            $parent->fcm_token,
-                            "❌ Liaison refusée",
-                            "{$enseignantName} a refusé d'établir une discussion avec vous.",
-                            [
-                                'type' => 'chat_rejected',
-                                'conversation_id' => (string)$conversation->id,
-                                'status' => 'rejected'
-                            ]
-                        );
-                    }
+                $title = "❌ Liaison refusée";
+                $body = "{$parentName} a refusé la demande de discussion.";
+
+                $payload = [
+                    'type' => 'chat_rejected',
+                    'conversation_id' => (string)$conversation->id,
+                    'status' => 'rejected',
+                    'sent_at' => now()->timestamp
+                ];
+
+                // Notifier l'enseignant
+                if (!empty($enseignant->fcm_token)) {
+                    $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, $payload);
+                }
+                // Notifier le parent
+                if (!empty($parent->fcm_token)) {
+                    $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, $payload);
                 }
             } elseif ($status === 'accepted') {
-                // Notifier l'expéditeur du premier message que sa demande a été acceptée
-                if ($senderWasEnseignant) {
-                    // L'enseignant avait initié, on notifie l'enseignant que le parent a accepté
-                    $parent = ParentUser::find($conversation->parent_id);
-                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
-                        ->where('id', $conversation->enseignant_id)
-                        ->first();
-                    if ($enseignant && !empty($enseignant->fcm_token) && $parent) {
-                        $parentName = trim("{$parent->prenom} {$parent->nom}");
-                        $this->notificationService->sendAndSave(
-                            'enseignant',
-                            $enseignant->id,
-                            $enseignant->fcm_token,
-                            "✅ Liaison acceptée",
-                            "{$parentName} a accepté votre demande de discussion.",
-                            [
-                                'type' => 'chat_accepted',
-                                'conversation_id' => (string)$conversation->id,
-                                'status' => 'accepted',
-                                'action' => 'open_chat'
-                            ]
-                        );
-                    }
-                } else {
-                    // Le parent avait initié, on notifie le parent que l'enseignant a accepté
-                    $parent = ParentUser::find($conversation->parent_id);
-                    $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
-                        ->where('id', $conversation->enseignant_id)
-                        ->first();
-                    if ($parent && !empty($parent->fcm_token) && $enseignant) {
-                        $enseignantName = trim("{$enseignant->prenom} {$enseignant->nom}");
-                        $this->notificationService->sendAndSave(
-                            'parent',
-                            $parent->id,
-                            $parent->fcm_token,
-                            "✅ Liaison acceptée",
-                            "{$enseignantName} a accepté votre demande de discussion.",
-                            [
-                                'type' => 'chat_accepted',
-                                'conversation_id' => (string)$conversation->id,
-                                'status' => 'accepted',
-                                'action' => 'open_chat'
-                            ]
-                        );
-                    }
+                $title = "✅ Liaison acceptée";
+                $body = "La liaison de discussion est désormais établie entre {$enseignantName} et {$parentName}.";
+
+                $enfantsIds = \Illuminate\Support\Facades\DB::table('eleve_parents')
+                    ->where('parent_id', $parent->id)
+                    ->pluck('eleve_id');
+
+                $firstEleve = \App\Models\Eleve::find($enfantsIds->first());
+
+                $payload = [
+                    'type' => 'chat_accepted',
+                    'conversation_id' => (string)$conversation->id,
+                    'status' => 'accepted',
+                    'action' => 'open_chat',
+                    'eleve_prenom' => $firstEleve ? $firstEleve->prenom : '',
+                    'sent_at' => now()->timestamp
+                ];
+
+                // Notifier l'enseignant
+                if (!empty($enseignant->fcm_token)) {
+                    $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, $payload);
+                }
+                // Notifier le parent
+                if (!empty($parent->fcm_token)) {
+                    $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, $payload);
+                }
+
+                // Générer l'information système dans la table admin_informations pour chaque enfant du parent
+                $infoMessage = "Vous êtes désormais autorisé à communiquer avec {$enseignantName}. L'administration de l'établissement est en copie de tous vos échanges.";
+
+                foreach ($enfantsIds as $eleveId) {
+                    \App\Models\AdminInformation::create([
+                        'eleve_id' => $eleveId,
+                        'type' => 'info',
+                        'titre' => 'Liaison de discussion établie',
+                        'contenu' => $infoMessage,
+                        'is_read' => false
+                    ]);
                 }
             }
         } catch (\Throwable $e) {
@@ -456,15 +430,16 @@ class MessageController extends Controller
     {
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
             ->leftJoin('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
+            ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.enseignant_id', $enseignant_id)
-            ->whereNotNull('conversations.parent_id')
             ->select(
                 'conversations.id as conversation_id',
                 'conversations.parent_id',
                 'conversations.status',
                 'conversations.subject',
                 'parent_users.nom as parent_nom',
-                'parent_users.prenom as parent_prenom'
+                'parent_users.prenom as parent_prenom',
+                'ecoles.nom as admin_name'
             )
             ->get();
 
@@ -477,17 +452,26 @@ class MessageController extends Controller
             $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
             $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
 
-            $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
-                ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-                ->where('eleve_parents.parent_id', $conv->parent_id)
-                ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
-                ->first();
+            // Compter les messages non lus
+            $unreadCount = Message::where('conversation_id', $conv->conversation_id)
+                ->where('sender_type', '!=', 'enseignant')
+                ->where('is_read', false)
+                ->count();
+            $conv->unread_count = $unreadCount;
 
-            if ($eleve) {
-                $conv->eleve_nom = $eleve->nom;
-                $conv->eleve_prenom = $eleve->prenom;
-                $conv->classe_nom = $eleve->classe_nom;
+            if ($conv->parent_id) {
+                $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
+                    ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+                    ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                    ->where('eleve_parents.parent_id', $conv->parent_id)
+                    ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
+                    ->first();
+
+                if ($eleve) {
+                    $conv->eleve_nom = $eleve->nom;
+                    $conv->eleve_prenom = $eleve->prenom;
+                    $conv->classe_nom = $eleve->classe_nom;
+                }
             }
         }
 

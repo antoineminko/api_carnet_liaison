@@ -24,7 +24,7 @@ class IncidentController extends Controller
             'eleves_ids.*' => 'exists:eleves,id',
             'enseignant_id' => 'required|exists:enseignants,id',
             'classe_id' => 'nullable|exists:classes,id',
-            'type' => 'required|in:desordre,bavardage,bagarre,injure,retenu,autre',
+            'type' => 'required|in:retard_repete,absence_injustifiee,indiscipline,violence,insolence,non_respect,devoirs_non_faits,telephone,degradation,perturbation,autre',
             'description' => 'nullable|string|max:500',
             'date' => 'required|date'
         ]);
@@ -59,6 +59,8 @@ class IncidentController extends Controller
             $enseignant = Enseignant::find($request->enseignant_id);
             $typeLabel = Incident::getTypeLabel($request->type);
 
+            $elevesAndIncidents = [];
+
             foreach ($elevesIds as $eleveId) {
                 // Créer l'incident pour chaque élève
                 $incident = Incident::create([
@@ -75,14 +77,21 @@ class IncidentController extends Controller
                 $eleve = Eleve::find($eleveId);
 
                 if ($eleve) {
-                    // Envoyer notification aux parents
-                    $this->notifyParents($eleve, $enseignant, $incident, $typeLabel);
+                    $elevesAndIncidents[] = [
+                        'eleve' => $eleve,
+                        'incident' => $incident
+                    ];
 
                     $createdIncidents[] = [
                         'id' => $incident->id,
                         'eleve' => $eleve->prenom . ' ' . $eleve->nom,
                     ];
                 }
+            }
+
+            // Envoyer notification aux parents
+            if (!empty($elevesAndIncidents)) {
+                $this->notifyParentsGroup($elevesAndIncidents, $enseignant, $typeLabel);
             }
 
             DB::commit();
@@ -175,60 +184,77 @@ class IncidentController extends Controller
     }
 
     /**
-     * Notifier les parents d'un incident
+     * Notifier les parents d'un groupe d'incidents (un seul push par parent)
      */
-    public function notifyParents($eleve, $enseignant, $incident, $typeLabel)
+    public function notifyParentsGroup($elevesAndIncidents, $enseignant, $typeLabel)
     {
         try {
-            // Récupérer les parents via la table eleve_parents
-            $parentLinks = DB::table('eleve_parents')
-                ->where('eleve_id', $eleve->id)
-                ->get();
-
-            if ($parentLinks->isEmpty()) {
-                \Log::info('Aucun parent lié pour l\'élève ' . $eleve->id);
-                return;
-            }
-            
-            \Log::info('Incident notification: ' . $parentLinks->count() . ' parents trouvés pour l\'élève ' . $eleve->id);
-
             $notificationService = app(PushNotificationService::class);
-            
-            $title = "Incident signalé - " . $eleve->prenom;
-            $body = $typeLabel . " signalé par " . $enseignant->prenom . " " . $enseignant->nom . " (" . $enseignant->matiere . ")";
+            $parentsToNotify = [];
 
-            foreach ($parentLinks as $parentLink) {
-                $parent = \App\Models\ParentUser::find($parentLink->parent_id);
-                
-                if ($parent) {
-                    $token = $parent->fcm_token ?? '';
-                    \Log::info('Envoi notification au parent ' . $parent->id . ' - Token: ' . substr($token, 0, 20) . '...');
-                    $dataPayload = [
-                        'eleve_id' => (string)$eleve->id,
-                        'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
+            foreach ($elevesAndIncidents as $item) {
+                $eleve = $item['eleve'];
+                $incident = $item['incident'];
+
+                $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleve->id)->get();
+
+                if ($parentLinks->isEmpty()) {
+                    \Log::info('Aucun parent lié pour l\'élève ' . $eleve->id);
+                    continue;
+                }
+
+                $title = "Incident signalé - " . $eleve->prenom;
+                $body = $typeLabel . " signalé par " . $enseignant->prenom . " " . $enseignant->nom . " (" . $enseignant->matiere . ")";
+
+                $dataPayload = [
+                    'eleve_id' => (string)$eleve->id,
+                    'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
+                    'type' => 'incident',
+                    'incident_id' => (string)$incident->id,
+                    'incident_type' => $incident->type,
+                    'enseignant_nom' => trim($enseignant->prenom . ' ' . $enseignant->nom),
+                    'matiere' => $enseignant->matiere ?? '',
+                    'date' => $incident->date->format('Y-m-d')
+                ];
+
+                foreach ($parentLinks as $parentLink) {
+                    $parentId = $parentLink->parent_id;
+
+                    // Créer la notification individuelle en BDD pour garder le badge par élève
+                    \App\Models\Notification::create([
+                        'user_type' => 'parent',
+                        'user_id' => $parentId,
                         'type' => 'incident',
-                        'incident_id' => (string)$incident->id,
-                        'incident_type' => $incident->type,
-                        'enseignant_nom' => trim($enseignant->prenom . ' ' . $enseignant->nom),
-                        'matiere' => $enseignant->matiere ?? '',
-                        'date' => $incident->date->format('Y-m-d')
-                    ];
-                    
-                    $result = $notificationService->sendAndSave(
-                        'parent',
-                        $parent->id,
-                        $token,
-                        $title,
-                        $body,
-                        $dataPayload
-                    );
-                    \Log::info('Résultat notification: ' . json_encode($result));
-                } else {
-                    \Log::warning('Parent introuvable pour ce lien parentLink.');
+                        'title' => $title,
+                        'message' => $body,
+                        'data' => $dataPayload,
+                    ]);
+
+                    // Conserver le token du parent pour le push groupé
+                    if (!isset($parentsToNotify[$parentId])) {
+                        $parent = \App\Models\ParentUser::find($parentId);
+                        if ($parent && !empty($parent->fcm_token)) {
+                            $parentsToNotify[$parentId] = $parent->fcm_token;
+                        }
+                    }
                 }
             }
+
+            // Envoyer un seul push global par parent concerné
+            foreach ($parentsToNotify as $parentId => $token) {
+                \Log::info('Envoi push groupé incident au parent ' . $parentId . ' - Token: ' . substr($token, 0, 20) . '...');
+                $notificationService->sendPushOnly(
+                    $token,
+                    "Nouveaux signalements",
+                    "De nouveaux signalements de comportement ont été enregistrés.",
+                    [
+                        'type' => 'incident_group',
+                    ]
+                );
+            }
+
         } catch (\Exception $e) {
-            \Log::error('Erreur notification incident: ' . $e->getMessage());
+            \Log::error('Erreur notification groupée incident: ' . $e->getMessage());
         }
     }
 }

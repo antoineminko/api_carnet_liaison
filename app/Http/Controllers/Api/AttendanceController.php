@@ -31,6 +31,17 @@ class AttendanceController extends Controller
         DB::beginTransaction();
 
         try {
+            $targets = collect();
+            $ecoleNom = DB::table('classes')
+                ->join('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
+                ->where('classes.id', $classeId)
+                ->value('ecoles.nom');
+
+            $matiere = DB::table('classe_enseignant')
+                ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                ->where('classe_enseignant.classe_id', $classeId)
+                ->value('enseignants.matiere') ?? '';
+
             foreach ($request->attendances as $attData) {
                 $eleveId = $attData['eleve_id'];
                 $status = $attData['status'];
@@ -46,51 +57,76 @@ class AttendanceController extends Controller
                         'status' => $status
                     ]
                 );
-                // Send push notification to parents for all statuses (present, absent, late)
+
                 $eleve = Eleve::find($eleveId);
                 
                 if ($eleve) {
-                    // Récupérer le nom de l'école via la classe
-                    $ecoleNom = DB::table('classes')
-                        ->join('ecoles', 'classes.ecole_id', '=', 'ecoles.id')
-                        ->where('classes.id', $classeId)
-                        ->value('ecoles.nom');
-
-                    // Find parents via eleve_parents table
-                    $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleveId)->get();
+                    $parentIds = DB::table('eleve_parents')->where('eleve_id', $eleveId)->pluck('parent_id');
                     
-                    foreach ($parentLinks as $parentLink) {
-                        $parent = ParentUser::find($parentLink->parent_id);
-                        if ($parent) {
-                            $prenomNom = trim($eleve->prenom . ' ' . $eleve->nom);
-                            $statusFr = 'présent';
-                            if ($status === 'absent') $statusFr = 'absent';
-                            if ($status === 'late') $statusFr = 'en retard';
+                    foreach ($parentIds as $parentId) {
+                        $targets->push([
+                            'parent_id' => $parentId,
+                            'eleve_id' => $eleveId,
+                            'eleve_nom' => trim($eleve->prenom . ' ' . $eleve->nom),
+                            'status' => $status,
+                        ]);
+                    }
+                }
+            }
 
-                            // Titre avec nom de l'élève
-                            $title = "{$prenomNom} - Appel de présence";
-                            // Corps avec nom de l'école si disponible
-                            $ecoleStr = $ecoleNom ? " ({$ecoleNom})" : '';
-                            $body = "{$prenomNom} a été marqué {$statusFr} aujourd'hui{$ecoleStr}.";
-                                
-                            try {
-                                $notificationService = app(PushNotificationService::class);
-                                $token = $parent->fcm_token ?? '';
-                                $notificationService->sendAndSave('parent', $parent->id, $token, $title, $body, [
-                                    'eleve_id'   => (string)$eleveId,
-                                    'child_name' => $prenomNom,
-                                    'ecole_nom'  => $ecoleNom ?? '',
-                                    'type'       => 'attendance_alert',
-                                    'status'     => (string)$status,
-                                    'matiere'    => DB::table('classe_enseignant')
-                                        ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
-                                        ->where('classe_enseignant.classe_id', $classeId)
-                                        ->value('enseignants.matiere') ?? '',
-                                ]);
-                            } catch (\Throwable $e) {
-                                \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
-                            }
-                        }
+            // Group by parent
+            $groupedTargets = $targets->groupBy('parent_id');
+            $notificationService = app(PushNotificationService::class);
+
+            foreach ($groupedTargets as $parentId => $childrenTargets) {
+                $parent = ParentUser::find($parentId);
+                if (!$parent) continue;
+
+                // Save individual notifications in DB for each child
+                foreach ($childrenTargets as $childTarget) {
+                    $statusFr = 'présent';
+                    if ($childTarget['status'] === 'absent') $statusFr = 'absent';
+                    if ($childTarget['status'] === 'late') $statusFr = 'en retard';
+
+                    $title = "{$childTarget['eleve_nom']} - Appel de présence";
+                    $ecoleStr = $ecoleNom ? " ({$ecoleNom})" : '';
+                    $body = "{$childTarget['eleve_nom']} a été marqué {$statusFr} aujourd'hui{$ecoleStr}.";
+
+                    \App\Models\Notification::create([
+                        'user_type' => 'parent',
+                        'user_id' => $parentId,
+                        'title' => $title,
+                        'message' => $body,
+                        'data' => [
+                            'eleve_id'   => (string)$childTarget['eleve_id'],
+                            'child_name' => $childTarget['eleve_nom'],
+                            'ecole_nom'  => $ecoleNom ?? '',
+                            'type'       => 'attendance_alert',
+                            'status'     => (string)$childTarget['status'],
+                            'matiere'    => $matiere,
+                        ],
+                        'is_read' => false,
+                    ]);
+                }
+
+                // Send 1 push notification per parent
+                if (!empty($parent->fcm_token)) {
+                    $title = "Appel de présence";
+                    $pushBody = "Les présences de vos enfants ont été mises à jour.";
+
+                    try {
+                        $notificationService->sendPushOnly(
+                            $parent->fcm_token,
+                            $title,
+                            $pushBody,
+                            [
+                                'type' => 'attendance_group',
+                                'classe_id' => (string)$classeId,
+                                'date' => $date,
+                            ]
+                        );
+                    } catch (\Throwable $e) {
+                        \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
                     }
                 }
             }

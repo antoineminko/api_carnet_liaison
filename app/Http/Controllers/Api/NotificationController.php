@@ -89,6 +89,11 @@ class NotificationController extends Controller
         }
         $notifications = \App\Models\Notification::where('user_type', $role)
             ->whereIn('user_id', $userIds)
+            ->whereNotIn('type', [
+                'incoming_call', 'call_missed', 'call_rejected',
+                'appointment_request', 'appointment_accepted', 'appointment_refused',
+                'appointment_postponed', 'appointment_cancelled', 'appointment_update'
+            ])
             ->where('created_at', '>=', now()->subDays(7))
             ->orderBy('created_at', 'desc')
             ->limit(50)
