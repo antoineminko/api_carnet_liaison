@@ -239,22 +239,26 @@ class IncidentController extends Controller
                     if (!isset($parentsToNotify[$parentId])) {
                         $parent = \App\Models\ParentUser::find($parentId);
                         if ($parent && !empty($parent->fcm_token)) {
-                            $parentsToNotify[$parentId] = $parent->fcm_token;
+                            $parentsToNotify[$parentId] = [
+                                'token' => $parent->fcm_token,
+                                'payload' => $dataPayload
+                            ];
                         }
                     }
                 }
             }
 
-            // Envoyer un seul push global par parent concerné
-            foreach ($parentsToNotify as $parentId => $token) {
+            // Fallback: Envoyer un seul push global par parent concerné, compatible avec l'ancien code mobile
+            foreach ($parentsToNotify as $parentId => $data) {
+                $token = $data['token'];
+                $payload = $data['payload'];
+                
                 \Log::info('Envoi push groupé incident au parent ' . $parentId . ' - Token: ' . substr($token, 0, 20) . '...');
                 $notificationService->sendPushOnly(
                     $token,
                     "Nouveaux signalements",
                     "De nouveaux signalements de comportement ont été enregistrés.",
-                    [
-                        'type' => 'incident_group',
-                    ]
+                    $payload // type 'incident' est déjà dans le payload!
                 );
             }
 

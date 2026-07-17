@@ -126,19 +126,22 @@ class DevoirController extends Controller
                 ]);
             }
 
-            // Envoyer un seul push FCM pour le parent
-            if (!empty($parent->fcm_token)) {
+            // Fallback: Envoyer un seul push FCM pour le parent compatible avec mobile
+            if (!empty($parent->fcm_token) && count($children) > 0) {
+                $firstChild = $children->first();
                 $pushBody = count($children) > 1 
                     ? "Nouveau devoir disponible pour vos enfants."
-                    : "Nouveau devoir disponible pour " . trim($children->first()->eleve_prenom ?? '');
+                    : "Nouveau devoir disponible pour " . trim($firstChild->eleve_prenom ?? '');
 
                 $this->notificationService->sendPushOnly(
                     $parent->fcm_token,
                     $title,
                     $pushBody,
                     [
-                        'type' => 'new_homework_group',
-                        'classe_id' => (string) $request->classe_id,
+                        'type' => 'new_homework',
+                        'devoir_id' => (string) $devoir->id,
+                        'eleve_id' => (string) $firstChild->eleve_id,
+                        'child_name' => trim(($firstChild->eleve_prenom ?? '') . ' ' . ($firstChild->eleve_nom ?? '')),
                         'matiere' => $request->matiere,
                     ]
                 );

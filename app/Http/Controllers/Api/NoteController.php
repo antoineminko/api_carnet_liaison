@@ -119,21 +119,24 @@ class NoteController extends Controller
                     ]);
                 }
 
-                // Send 1 push notification per parent
-                if (!empty($parent->fcm_token)) {
+                // Fallback: Send 1 push notification per parent using old mobile-compatible format (new_grade)
+                if (!empty($parent->fcm_token) && count($childrenTargets) > 0) {
+                    $firstChild = $childrenTargets->first();
                     $title = "Nouvelles évaluations : {$request->matiere}";
                     
                     $pushBody = count($childrenTargets) > 1 
                         ? "Les résultats scolaires de vos enfants sont disponibles.\nÉvaluation: {$request->titre}"
-                        : "Les résultats scolaires de " . $childrenTargets->first()['eleve_nom'] . " sont disponibles.\nÉvaluation: {$request->titre}";
+                        : "Les résultats scolaires de " . $firstChild['eleve_nom'] . " sont disponibles.\nÉvaluation: {$request->titre}";
 
                     $this->notificationService->sendPushOnly(
                         $parent->fcm_token,
                         $title,
                         $pushBody,
                         [
-                            'type' => 'new_grade_group',
-                            'classe_id' => (string) $request->classe_id,
+                            'type' => 'new_grade',
+                            'devoir_id' => (string) $devoir->id,
+                            'eleve_id' => (string) $firstChild['eleve_id'],
+                            'child_name' => $firstChild['eleve_nom'],
                             'matiere' => $request->matiere,
                         ]
                     );

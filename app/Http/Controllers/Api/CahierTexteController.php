@@ -98,19 +98,22 @@ class CahierTexteController extends Controller
                 ]);
             }
 
-            // Envoyer un seul push FCM pour le parent
-            if (!empty($parent->fcm_token)) {
+            // Fallback: Envoyer un seul push FCM pour le parent, compatible avec l'application mobile
+            if (!empty($parent->fcm_token) && count($children) > 0) {
+                $firstChild = $children->first();
                 $pushBody = count($children) > 1 
                     ? "Le cahier de textes a été mis à jour pour vos enfants."
-                    : "Le cahier de textes a été mis à jour pour " . trim($children->first()->eleve_prenom ?? '');
+                    : "Le cahier de textes a été mis à jour pour " . trim($firstChild->eleve_prenom ?? '');
 
                 $this->notificationService->sendPushOnly(
                     $parent->fcm_token,
                     $title,
                     $pushBody,
                     [
-                        'type' => 'new_textbook_group',
-                        'classe_id' => (string) $request->classe_id,
+                        'type' => 'new_textbook',
+                        'cahier_texte_id' => (string) $cahierTexte->id,
+                        'eleve_id' => (string) $firstChild->eleve_id,
+                        'child_name' => trim(($firstChild->eleve_prenom ?? '') . ' ' . ($firstChild->eleve_nom ?? '')),
                         'matiere' => $request->matiere,
                     ]
                 );

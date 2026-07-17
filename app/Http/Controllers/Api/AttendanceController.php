@@ -51,9 +51,9 @@ class AttendanceController extends Controller
                     [
                         'eleve_id' => $eleveId,
                         'date' => $date,
+                        'classe_id' => $classeId,
                     ],
                     [
-                        'classe_id' => $classeId,
                         'status' => $status
                     ]
                 );
@@ -110,10 +110,12 @@ class AttendanceController extends Controller
                     ]);
                 }
 
-                // Send 1 push notification per parent
-                if (!empty($parent->fcm_token)) {
-                    $title = "Appel de présence";
-                    $pushBody = "Les présences de vos enfants ont été mises à jour.";
+                // Fallback: Send 1 push notification per parent but using the old mobile-compatible format (attendance_alert)
+                // We use the first child's data for the push payload so the deep-link works and doesn't crash the app
+                if (!empty($parent->fcm_token) && count($childrenTargets) > 0) {
+                    $firstChild = $childrenTargets[0];
+                    $title = "Les informations de présence de vos enfants sont disponibles";
+                    $pushBody = "Les présences ont été mises à jour.";
 
                     try {
                         $notificationService->sendPushOnly(
@@ -121,13 +123,15 @@ class AttendanceController extends Controller
                             $title,
                             $pushBody,
                             [
-                                'type' => 'attendance_group',
-                                'classe_id' => (string)$classeId,
-                                'date' => $date,
+                                'type'       => 'attendance_alert',
+                                'eleve_id'   => (string)$firstChild['eleve_id'],
+                                'child_name' => $firstChild['eleve_nom'],
+                                'status'     => (string)$firstChild['status'],
+                                'matiere'    => $matiere,
                             ]
                         );
                     } catch (\Throwable $e) {
-                        \Log::error('Erreur Firebase non configuré : ' . $e->getMessage());
+                        \Log::error('Erreur Firebase push : ' . $e->getMessage());
                     }
                 }
             }
