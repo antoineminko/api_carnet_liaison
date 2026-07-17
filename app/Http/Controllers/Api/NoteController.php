@@ -106,8 +106,9 @@ class NoteController extends Controller
                     \App\Models\Notification::create([
                         'user_type' => 'parent',
                         'user_id' => $parentId,
+                        'type' => 'new_grade',
                         'title' => "Nouvelle Note : {$request->matiere}",
-                        'body' => "Une note a été publiée pour " . $childTarget['eleve_nom'] . ".\nÉvaluation: {$request->titre}",
+                        'message' => "Une note a été publiée pour " . $childTarget['eleve_nom'] . ".\nÉvaluation: {$request->titre}",
                         'data' => json_encode([
                             'type' => 'new_grade',
                             'devoir_id' => (string) $devoir->id,

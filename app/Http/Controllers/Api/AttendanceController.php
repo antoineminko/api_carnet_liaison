@@ -95,6 +95,7 @@ class AttendanceController extends Controller
                     \App\Models\Notification::create([
                         'user_type' => 'parent',
                         'user_id' => $parentId,
+                        'type' => 'attendance_alert',
                         'title' => $title,
                         'message' => $body,
                         'data' => [
