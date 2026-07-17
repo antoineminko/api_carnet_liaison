@@ -37,18 +37,12 @@ class PushNotificationService
         try {
             $notification = Notification::create($title, $body);
 
-            $config = AndroidConfig::fromArray([
-                'priority' => 'high',
-                'notification' => [
-                    'default_sound' => true,
-                    'default_vibrate_timings' => true,
-                ],
-            ]);
+            // Firebase FCM exige que toutes les valeurs dans "data" soient des chaînes de caractères (string).
+            $stringifiedData = array_map('strval', $data);
 
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
-                ->withData($data)
-                ->withAndroidConfig($config);
+                ->withData($stringifiedData);
 
             $this->messaging->send($message);
             \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
