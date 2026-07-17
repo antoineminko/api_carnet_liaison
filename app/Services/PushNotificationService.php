@@ -37,9 +37,6 @@ class PushNotificationService
         try {
             $notification = Notification::create($title, $body);
 
-            // Firebase FCM exige que toutes les valeurs dans "data" soient des chaînes de caractères (string).
-            $stringifiedData = array_map('strval', $data);
-
             $config = AndroidConfig::fromArray([
                 'priority' => 'high',
                 'notification' => [
@@ -50,7 +47,7 @@ class PushNotificationService
 
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
-                ->withData($stringifiedData)
+                ->withData($data)
                 ->withAndroidConfig($config);
 
             $this->messaging->send($message);
