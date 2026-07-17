@@ -27,8 +27,11 @@ class PushNotificationService
     public function sendToToken($token, $title, $body, $data = [])
     {
         if (empty($token)) {
+            \Log::warning('[Push] sendToToken: token vide, envoi annulé. Title=' . $title);
             return false;
         }
+
+        \Log::info('[Push] sendToToken: envoi vers token=' . substr($token, 0, 20) . '... title=' . $title);
 
         try {
             $notification = Notification::create($title, $body);
@@ -41,9 +44,10 @@ class PushNotificationService
                 ->withData($stringifiedData);
 
             $this->messaging->send($message);
+            \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
             return true;
         } catch (\Exception $e) {
-            \Log::error('Erreur Push Notification: ' . $e->getMessage());
+            \Log::error('[Push] Erreur Push Notification: ' . $e->getMessage() . ' | Token: ' . substr($token, 0, 20) . '...');
             return false;
         }
     }
