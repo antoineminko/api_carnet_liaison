@@ -5,6 +5,7 @@ namespace App\Services;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification;
+use Kreait\Firebase\Messaging\AndroidConfig;
 
 class PushNotificationService
 {
@@ -39,9 +40,18 @@ class PushNotificationService
             // Firebase FCM exige que toutes les valeurs dans "data" soient des chaînes de caractères (string).
             $stringifiedData = array_map('strval', $data);
 
+            $config = AndroidConfig::fromArray([
+                'priority' => 'high',
+                'notification' => [
+                    'default_sound' => true,
+                    'default_vibrate_timings' => true,
+                ],
+            ]);
+
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
-                ->withData($stringifiedData);
+                ->withData($stringifiedData)
+                ->withAndroidConfig($config);
 
             $this->messaging->send($message);
             \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
