@@ -5,7 +5,10 @@ namespace App\Services;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification;
-use Kreait\Firebase\Messaging\AndroidConfig;
+use Kreait\Firebase\Exception\Messaging\NotFound;
+use Kreait\Firebase\Exception\MessagingException;
+use App\Models\ParentUser;
+use App\Models\Enseignant;
 
 class PushNotificationService
 {
@@ -23,10 +26,37 @@ class PushNotificationService
             return false;
         }
 
-        \Log::info('[Push] sendToToken: dispatching job vers token=' . substr($token, 0, 20) . '... title=' . $title);
+        \Log::info('[Push] sendToToken: envoi synchrone vers token=' . substr($token, 0, 20) . '... title=' . $title);
 
-        \App\Jobs\SendPushNotificationJob::dispatch($token, $title, $body, $data);
-        return true;
+        try {
+            $notification = Notification::create($title, $body);
+            $stringifiedData = array_map('strval', $data);
+
+            $message = CloudMessage::withTarget('token', $token)
+                ->withNotification($notification)
+                ->withData($stringifiedData);
+
+            $this->messaging->send($message);
+            \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
+            return true;
+
+        } catch (NotFound $e) {
+            \Log::error('[Push] Token invalide/expiré, suppression: ' . substr($token, 0, 20) . '... | ' . $e->getMessage());
+            $this->removeInvalidToken($token);
+            return false;
+        } catch (MessagingException $e) {
+            $msg = strtolower($e->getMessage());
+            if (str_contains($msg, 'unregistered') || str_contains($msg, 'invalid')) {
+                \Log::error('[Push] Token Unregistered, suppression: ' . substr($token, 0, 20) . '...');
+                $this->removeInvalidToken($token);
+            } else {
+                \Log::error('[Push] Erreur FCM temporaire (réseau?): ' . $e->getMessage());
+            }
+            return false;
+        } catch (\Exception $e) {
+            \Log::error('[Push] Erreur générale: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -56,4 +86,16 @@ class PushNotificationService
     {
         return $this->sendToToken($token, $title, $body, $data);
     }
+
+    protected function removeInvalidToken($token)
+    {
+        try {
+            ParentUser::where('fcm_token', $token)->update(['fcm_token' => null]);
+            Enseignant::where('fcm_token', $token)->update(['fcm_token' => null]);
+            \Log::info('[Push] Nettoyage réussi du token expiré en base.');
+        } catch (\Exception $e) {
+            \Log::error('[Push] Erreur lors du nettoyage du token: ' . $e->getMessage());
+        }
+    }
 }
+
