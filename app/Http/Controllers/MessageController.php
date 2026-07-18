@@ -219,9 +219,9 @@ class MessageController extends Controller
         $conversation->save();
 
         if ($request->status === 'rejected') {
-            $this->sendConversationStatusNotification($conversation, 'rejected');
+            $this->sendConversationStatusNotification($conversation, 'rejected', $request->user());
         } elseif ($request->status === 'accepted') {
-            $this->sendConversationStatusNotification($conversation, 'accepted');
+            $this->sendConversationStatusNotification($conversation, 'accepted', $request->user());
         }
 
         return response()->json(['success' => true, 'conversation' => $conversation]);
@@ -230,7 +230,7 @@ class MessageController extends Controller
     /**
      * Envoyer une notification lors du changement de statut d'une conversation
      */
-    private function sendConversationStatusNotification($conversation, $status)
+    private function sendConversationStatusNotification($conversation, $status, $actionUser = null)
     {
         try {
             $parent = ParentUser::find($conversation->parent_id);
@@ -248,58 +248,119 @@ class MessageController extends Controller
                 $body = "{$parentName} a refusé la demande de discussion.";
 
                 $payload = [
-                    'type' => 'chat_rejected',
+                    'type'            => 'chat_rejected',
                     'conversation_id' => (string)$conversation->id,
-                    'status' => 'rejected',
-                    'sent_at' => now()->timestamp
+                    'status'          => 'rejected',
+                    'sent_at'         => now()->timestamp
                 ];
 
-                // Notifier l'enseignant
-                if (!empty($enseignant->fcm_token)) {
+                $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
+
+                // Si le parent a refusé (le plus probable), notifier l'enseignant
+                if ($isParentAction && !empty($enseignant->fcm_token)) {
                     $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, $payload);
-                }
-                // Notifier le parent
-                if (!empty($parent->fcm_token)) {
+                } 
+                // Si l'enseignant a refusé, notifier le parent
+                elseif (!$isParentAction && !empty($parent->fcm_token)) {
                     $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, $payload);
                 }
-            } elseif ($status === 'accepted') {
-                $title = "✅ Liaison acceptée";
-                $body = "La liaison de discussion est désormais établie entre {$enseignantName} et {$parentName}.";
 
+            } elseif ($status === 'accepted') {
+
+                $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
+
+                // ── Textes conformes à la règle métier ──
+                $titleForTeacher = "✅ Liaison acceptée";
+                $bodyForTeacher  = "{$parentName} a accepté la demande de discussion.";
+
+                $titleForParent = "✅ Liaison établie";
+                $bodyForParent  = "Vous êtes désormais autorisé à communiquer avec {$enseignantName}. Vos échanges sont sécurisés et une copie est conservée par l'administration de l'établissement conformément au règlement interne.";
+
+                // ── Identifier les enfants concernés ──
                 $enfantsIds = \Illuminate\Support\Facades\DB::table('eleve_parents')
                     ->where('parent_id', $parent->id)
                     ->pluck('eleve_id');
 
-                $firstEleve = \App\Models\Eleve::find($enfantsIds->first());
+                $enseignantClasses = \Illuminate\Support\Facades\DB::table('classe_enseignant')
+                    ->where('enseignant_id', $enseignant->id)
+                    ->pluck('classe_id');
 
-                $payload = [
-                    'type' => 'chat_accepted',
+                // Enfants du parent qui sont dans une des classes de l'enseignant
+                $elevesCibles = \App\Models\Eleve::whereIn('id', $enfantsIds)
+                    ->whereIn('classe_id', $enseignantClasses)
+                    ->get();
+
+                // Si aucun enfant en commun, on sécurise en prenant le premier (ex: admin)
+                if ($elevesCibles->isEmpty()) {
+                    $firstEleve = \App\Models\Eleve::find($enfantsIds->first());
+                    if ($firstEleve) $elevesCibles = collect([$firstEleve]);
+                }
+
+                // ── Notifier l'AUTRE partie par PUSH (une seule fois) ──
+                $payloadPush = [
+                    'type'            => 'chat_accepted',
                     'conversation_id' => (string)$conversation->id,
-                    'status' => 'accepted',
-                    'action' => 'open_chat',
-                    'eleve_prenom' => $firstEleve ? $firstEleve->prenom : '',
-                    'sent_at' => now()->timestamp
+                    'status'          => 'accepted',
+                    'action'          => 'open_chat',
+                    'sent_at'         => now()->timestamp
                 ];
 
-                // Notifier l'enseignant
-                if (!empty($enseignant->fcm_token)) {
-                    $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, $payload);
-                }
-                // Notifier le parent
-                if (!empty($parent->fcm_token)) {
-                    $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, $payload);
+                if ($isParentAction) {
+                    if (!empty($enseignant->fcm_token)) {
+                        $this->notificationService->sendAndSave(
+                            'enseignant',
+                            $enseignant->id,
+                            $enseignant->fcm_token,
+                            $titleForTeacher,
+                            $bodyForTeacher,
+                            $payloadPush
+                        );
+                    }
+                } else {
+                    if (!empty($parent->fcm_token)) {
+                        $this->notificationService->sendAndSave(
+                            'parent',
+                            $parent->id,
+                            $parent->fcm_token,
+                            $titleForParent,
+                            $bodyForParent, // Texte générique pour le push
+                            $payloadPush
+                        );
+                    }
                 }
 
-                // Générer l'information système dans la table admin_informations pour chaque enfant du parent
-                $infoMessage = "Vous êtes désormais autorisé à communiquer avec {$enseignantName}. L'administration de l'établissement est en copie de tous vos échanges.";
+                // ── Créer les traces et bannières POUR CHAQUE ENFANT concerné ──
+                foreach ($elevesCibles as $eleve) {
+                    $enfantPrenom = $eleve->prenom ?? 'votre enfant';
+                    $infoMessage = "Vous êtes désormais autorisé à communiquer avec {$enseignantName} concernant {$enfantPrenom}. Vos échanges sont sécurisés et une copie est conservée par l'administration de l'établissement conformément au règlement interne.";
 
-                foreach ($enfantsIds as $eleveId) {
+                    // Enregistrement AdminInformation (stocké dans Infos -> Informations)
                     \App\Models\AdminInformation::create([
-                        'eleve_id' => $eleveId,
-                        'type' => 'info',
-                        'titre' => 'Liaison de discussion établie',
-                        'contenu' => $infoMessage,
-                        'is_read' => false
+                        'eleve_id' => $eleve->id,
+                        'type'     => 'info',
+                        'titre'    => 'Liaison de discussion établie',
+                        'contenu'  => $infoMessage,
+                        'is_read'  => false
+                    ]);
+
+                    // Créer la bannière (Notification BDD) pour le parent, qu'il ait accepté ou l'enseignant
+                    // Ainsi la bannière apparaît dans son interface et mène vers la fiche enfant
+                    $notifParentPayload = [
+                        'type'            => 'chat_accepted',
+                        'conversation_id' => (string)$conversation->id,
+                        'status'          => 'accepted',
+                        'enseignant_nom'  => $enseignantName,
+                        'eleve_id'        => (string)$eleve->id, // Pour la navigation Flutter
+                        'child_name'      => $enfantPrenom,
+                    ];
+                    
+                    \App\Models\Notification::create([
+                        'user_type' => 'parent',
+                        'user_id'   => $parent->id,
+                        'type'      => 'chat_accepted',
+                        'title'     => $titleForParent,
+                        'message'   => $infoMessage, // Texte personnalisé avec le nom de l'enfant
+                        'data'      => $notifParentPayload,
                     ]);
                 }
             }
@@ -307,6 +368,7 @@ class MessageController extends Controller
             \Log::error('Erreur notification statut conversation : ' . $e->getMessage());
         }
     }
+
 
     // Envoyer un nouveau message
     public function sendMessage(Request $request)

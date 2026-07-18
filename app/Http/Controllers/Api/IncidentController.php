@@ -195,16 +195,21 @@ class IncidentController extends Controller
     {
         try {
             $notificationService = app(PushNotificationService::class);
+            // $parentsToNotify[parentId] = ['token' => ..., 'payload' => ..., 'notification_id' => ...]
             $parentsToNotify = [];
+
+            \Log::info('[IncidentController] notifyParentsGroup démarré - ' . count($elevesAndIncidents) . ' incident(s)');
 
             foreach ($elevesAndIncidents as $item) {
                 $eleve = $item['eleve'];
                 $incident = $item['incident'];
 
+                \Log::info('[IncidentController] Traitement incident #' . $incident->id . ' pour élève #' . $eleve->id . ' (' . $eleve->prenom . ' ' . $eleve->nom . ')');
+
                 $parentLinks = DB::table('eleve_parents')->where('eleve_id', $eleve->id)->get();
 
                 if ($parentLinks->isEmpty()) {
-                    \Log::info('Aucun parent lié pour l\'élève ' . $eleve->id);
+                    \Log::info('[IncidentController] Aucun parent lié pour l\'élève ' . $eleve->id);
                     continue;
                 }
 
@@ -212,58 +217,78 @@ class IncidentController extends Controller
                 $body = $typeLabel . " signalé par " . $enseignant->prenom . " " . $enseignant->nom . " (" . $enseignant->matiere . ")";
 
                 $dataPayload = [
-                    'eleve_id' => (string)$eleve->id,
-                    'child_name' => trim($eleve->prenom . ' ' . $eleve->nom),
-                    'type' => 'incident',
-                    'incident_id' => (string)$incident->id,
-                    'incident_type' => $incident->type,
+                    'eleve_id'       => (string)$eleve->id,
+                    'child_name'     => trim($eleve->prenom . ' ' . $eleve->nom),
+                    'type'           => 'incident',
+                    'incident_id'    => (string)$incident->id,
+                    'incident_type'  => $incident->type,
                     'enseignant_nom' => trim($enseignant->prenom . ' ' . $enseignant->nom),
-                    'matiere' => $enseignant->matiere ?? '',
-                    'date' => $incident->date->format('Y-m-d')
+                    'matiere'        => $enseignant->matiere ?? '',
+                    'date'           => $incident->date->format('Y-m-d')
                 ];
 
                 foreach ($parentLinks as $parentLink) {
                     $parentId = $parentLink->parent_id;
 
-                    // Créer la notification individuelle en BDD pour garder le badge par élève
-                    \App\Models\Notification::create([
+                    \Log::info('[IncidentController] Création notification BDD pour parent #' . $parentId . ' - incident #' . $incident->id);
+
+                    // Créer la notification individuelle en BDD pour le badge par élève
+                    $notif = \App\Models\Notification::create([
                         'user_type' => 'parent',
-                        'user_id' => $parentId,
-                        'type' => 'incident',
-                        'title' => $title,
-                        'message' => $body,
-                        'data' => $dataPayload,
+                        'user_id'   => $parentId,
+                        'type'      => 'incident',
+                        'title'     => $title,
+                        'message'   => $body,
+                        'data'      => $dataPayload,
                     ]);
 
-                    // Conserver le token du parent pour le push groupé
+                    \Log::info('[IncidentController] Notification #' . $notif->id . ' créée en BDD pour parent #' . $parentId);
+
+                    // Stocker le token et le payload (avec notification_id) pour le push unique
+                    // Si ce parent a déjà un incident dans ce batch, on NE remplace PAS (1 seul push)
                     if (!isset($parentsToNotify[$parentId])) {
                         $parent = \App\Models\ParentUser::find($parentId);
                         if ($parent && !empty($parent->fcm_token)) {
                             $parentsToNotify[$parentId] = [
-                                'token' => $parent->fcm_token,
-                                'payload' => $dataPayload
+                                'token'           => $parent->fcm_token,
+                                'payload'         => array_merge($dataPayload, [
+                                    'notification_id' => (string)$notif->id,
+                                ]),
+                                'title'           => $title,
+                                'body'            => $body,
                             ];
+                            \Log::info('[IncidentController] Parent #' . $parentId . ' ajouté à la liste push (token: ' . substr($parent->fcm_token, 0, 20) . '...)');
+                        } else {
+                            \Log::warning('[IncidentController] Parent #' . $parentId . ' sans token FCM, pas de push');
                         }
+                    } else {
+                        \Log::info('[IncidentController] Parent #' . $parentId . ' déjà dans la liste push - pas de doublon');
                     }
                 }
             }
 
-            // Fallback: Envoyer un seul push global par parent concerné, compatible avec l'ancien code mobile
+            \Log::info('[IncidentController] Envoi push pour ' . count($parentsToNotify) . ' parent(s) unique(s)');
+
+            // Envoyer UN SEUL push par parent concerné
             foreach ($parentsToNotify as $parentId => $data) {
-                $token = $data['token'];
+                $token   = $data['token'];
                 $payload = $data['payload'];
-                
-                \Log::info('Envoi push groupé incident au parent ' . $parentId . ' - Token: ' . substr($token, 0, 20) . '...');
+
+                \Log::info('[IncidentController] → Envoi push au parent #' . $parentId . ' - Token: ' . substr($token, 0, 20) . '... - notification_id: ' . ($payload['notification_id'] ?? 'N/A'));
+
                 $notificationService->sendPushOnly(
                     $token,
                     "Nouveaux signalements",
                     "De nouveaux signalements de comportement ont été enregistrés.",
-                    $payload // type 'incident' est déjà dans le payload!
+                    $payload
                 );
             }
 
+            \Log::info('[IncidentController] notifyParentsGroup terminé');
+
         } catch (\Exception $e) {
-            \Log::error('Erreur notification groupée incident: ' . $e->getMessage());
+            \Log::error('[IncidentController] Erreur notification groupée incident: ' . $e->getMessage());
         }
     }
 }
+
