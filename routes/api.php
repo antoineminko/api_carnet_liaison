@@ -93,12 +93,13 @@ Route::get('/classes/{classeId}/eleves-devoirs', [DevoirController::class, 'getC
 Route::post('/notes', [NoteController::class, 'store']);
 
 // Rendez-vous
-Route::post('/appointments', [AppointmentController::class, 'store']);
-Route::put('/appointments/{id}/status', [AppointmentController::class, 'updateStatus']);
-Route::put('/appointments/{id}/accept-postponed', [AppointmentController::class, 'acceptPostponedDate']);
-Route::put('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
-Route::get('/appointments', [AppointmentController::class, 'index']);
-Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
+    Route::get('/appointments/parent/{id}', [AppointmentController::class, 'getParentAppointments']);
+    Route::put('/appointments/{id}/status', [AppointmentController::class, 'updateStatus']);
+    Route::put('/appointments/{id}/read', [AppointmentController::class, 'markAsRead']);
+    Route::put('/appointments/{id}/accept-postponed', [AppointmentController::class, 'acceptPostponedDate']);
+    Route::put('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
+    Route::get('/appointments', [AppointmentController::class, 'index']);
+    Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
 
 // Parents
 Route::middleware(['school'])->group(function () {

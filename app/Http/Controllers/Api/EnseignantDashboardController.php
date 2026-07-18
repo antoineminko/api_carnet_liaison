@@ -117,7 +117,8 @@ class EnseignantDashboardController extends Controller
                 'parent_users.nom as parent_nom',
                 'parent_users.prenom as parent_prenom',
                 'eleves.nom as eleve_nom',
-                'eleves.prenom as eleve_prenom'
+                'eleves.prenom as eleve_prenom',
+                DB::raw('(SELECT COUNT(*) FROM notifications WHERE notifications.user_type = \'enseignant\' AND notifications.user_id = appointments.enseignant_id AND (notifications.type = \'appointment_request\' OR notifications.type = \'appointment_update\') AND JSON_EXTRACT(notifications.data, "$.appointment_id") = appointments.id AND notifications.is_read = 0) as unread_count')
             )
             ->get();
 

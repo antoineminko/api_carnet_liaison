@@ -434,4 +434,24 @@ class AppointmentController extends Controller
             'appointment' => $appointment->fresh()
         ]);
     }
+
+    /**
+     * Marquer un rendez-vous comme lu par l'enseignant.
+     */
+    public function markAsRead($id)
+    {
+        $appointment = Appointment::findOrFail($id);
+
+        // Mettre à jour is_read dans la table notifications pour cet événement
+        \App\Models\Notification::where('user_type', 'enseignant')
+            ->where('user_id', $appointment->enseignant_id)
+            ->whereIn('type', ['appointment_request', 'appointment_update'])
+            ->whereJsonContains('data->appointment_id', (string)$id)
+            ->update(['is_read' => true]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rendez-vous marqué comme lu'
+        ]);
+    }
 }
