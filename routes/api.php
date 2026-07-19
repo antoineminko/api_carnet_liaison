@@ -152,6 +152,7 @@ Route::put('/calls/{id}/accept', [\App\Http\Controllers\Api\CallController::clas
 Route::put('/calls/{id}/reject', [\App\Http\Controllers\Api\CallController::class, 'reject']);
 Route::put('/calls/{id}/end', [\App\Http\Controllers\Api\CallController::class, 'end']);
 Route::put('/calls/{id}/missed', [\App\Http\Controllers\Api\CallController::class, 'markAsMissed']);
+Route::get('/calls/history', [\App\Http\Controllers\Api\CallController::class, 'history']); // Ajout historique global
 
 // Signaling WebRTC (Ne nécessite pas de X-School-Code car l'ID de l'appel suffit)
 Route::post('/calls/{callId}/offer', [\App\Http\Controllers\Api\CallController::class, 'storeOffer']);
@@ -171,7 +172,6 @@ Route::middleware(['school'])->group(function () {
     // Appels (Calls)
     Route::post('/calls/initiate', [\App\Http\Controllers\Api\CallController::class, 'initiate']);
     Route::get('/calls', [\App\Http\Controllers\Api\CallController::class, 'index']);
-    Route::get('/calls/history', [\App\Http\Controllers\Api\CallController::class, 'history']);
 
 
     // Signalements (Reports)

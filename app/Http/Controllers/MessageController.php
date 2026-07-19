@@ -306,15 +306,23 @@ class MessageController extends Controller
                 ];
 
                 if ($isParentAction) {
+                    \Log::info("[LIAISON] Le parent {$parent->id} accepte. Token enseignant {$enseignant->id} = " . ($enseignant->fcm_token ?? 'VIDE'));
                     if (!empty($enseignant->fcm_token)) {
-                        $this->notificationService->sendAndSave(
-                            'enseignant',
-                            $enseignant->id,
-                            $enseignant->fcm_token,
-                            $titleForTeacher,
-                            $bodyForTeacher,
-                            $payloadPush
-                        );
+                        try {
+                            $this->notificationService->sendAndSave(
+                                'enseignant',
+                                $enseignant->id,
+                                $enseignant->fcm_token,
+                                $titleForTeacher,
+                                $bodyForTeacher,
+                                $payloadPush
+                            );
+                            \Log::info("[LIAISON] sendAndSave terminé pour enseignant {$enseignant->id}");
+                        } catch (\Exception $e) {
+                            \Log::error("[LIAISON] Erreur sendAndSave pour enseignant: " . $e->getMessage());
+                        }
+                    } else {
+                        \Log::warning("[LIAISON] Impossible de notifier l'enseignant {$enseignant->id} car son fcm_token est vide.");
                     }
                 } else {
                     if (!empty($parent->fcm_token)) {
