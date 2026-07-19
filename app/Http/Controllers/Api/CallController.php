@@ -330,12 +330,27 @@ class CallController extends Controller
 
     private function notifyCaller(Call $call, string $status, string $reason = null)
     {
+        $receiverName = 'L\'utilisateur';
+        if ($call->receiver_type === 'enseignant') {
+            $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
+                ->where('id', $call->receiver_id)
+                ->first();
+            if ($enseignant) {
+                $receiverName = trim("{$enseignant->prenom} {$enseignant->nom}");
+            }
+        } else {
+            $parent = ParentUser::find($call->receiver_id);
+            if ($parent) {
+                $receiverName = trim("{$parent->prenom} {$parent->nom}");
+            }
+        }
+
         if ($call->caller_type === 'parent') {
             $parent = ParentUser::find($call->caller_id);
             if ($parent && !empty($parent->fcm_token)) {
                 $title = $status === 'rejected' ? '❌ Appel rejeté' : 'Appel manqué';
                 $body = $status === 'rejected'
-                    ? ($reason ?? 'L\'appel a été rejeté.')
+                    ? "{$receiverName} a rejeté l'appel."
                     : 'L\'appel n\'a pas été décroché.';
 
                 $this->notificationService->sendPushOnly(
@@ -356,7 +371,7 @@ class CallController extends Controller
             if ($enseignant && !empty($enseignant->fcm_token)) {
                 $title = $status === 'rejected' ? '❌ Appel rejeté' : 'Appel manqué';
                 $body = $status === 'rejected'
-                    ? ($reason ?? 'L\'appel a été rejeté.')
+                    ? "{$receiverName} a rejeté l'appel."
                     : 'L\'appel n\'a pas été décroché.';
 
                 $this->notificationService->sendPushOnly(
