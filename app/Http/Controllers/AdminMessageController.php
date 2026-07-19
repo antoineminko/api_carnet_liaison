@@ -404,6 +404,18 @@ class AdminMessageController extends Controller
         ]);
     }
 
+    public function markAdminInfoAsRead($id)
+    {
+        DB::table('admin_informations')
+            ->where('id', $id)
+            ->update(['is_read' => 1]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Information de l\'administration marquée comme lue'
+        ]);
+    }
+
     // Récupérer les broadcasts (annonces) de l'Admin
     public function getAdminBroadcasts(Request $request)
     {

@@ -201,6 +201,7 @@ Route::middleware(['school'])->group(function () {
 });
 
 Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
+Route::put('/admin/informations/{id}/read', [AdminMessageController::class, 'markAdminInfoAsRead']);
 
 // Protected routes
 Route::get('/user', function (Request $request) {
