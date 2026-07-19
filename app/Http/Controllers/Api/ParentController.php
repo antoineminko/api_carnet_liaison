@@ -143,6 +143,7 @@ class ParentController extends Controller
                         'arrival_time'      => $attendance?->created_at,
                         'matiere'           => $matiere,
                         'notif_count'       => $notifCount,
+                        'code_secret'       => $eleve->code_secret,
                     ];
                 });
 

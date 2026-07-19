@@ -110,12 +110,10 @@ class AttendanceController extends Controller
                     ]);
                 }
 
-                // Fallback: Send 1 push notification per parent but using the old mobile-compatible format (attendance_alert)
-                // We use the first child's data for the push payload so the deep-link works and doesn't crash the app
+                // Send 1 push notification per parent (group notification)
                 if (!empty($parent->fcm_token) && count($childrenTargets) > 0) {
-                    $firstChild = $childrenTargets[0];
-                    $title = "Les informations de présence de vos enfants sont disponibles";
-                    $pushBody = "Les présences ont été mises à jour.";
+                    $title = "Présences mises à jour";
+                    $pushBody = "Les informations de présence de vos enfants sont disponibles.";
 
                     try {
                         $notificationService->sendPushOnly(
@@ -123,10 +121,7 @@ class AttendanceController extends Controller
                             $title,
                             $pushBody,
                             [
-                                'type'       => 'attendance_alert',
-                                'eleve_id'   => (string)$firstChild['eleve_id'],
-                                'child_name' => $firstChild['eleve_nom'],
-                                'status'     => (string)$firstChild['status'],
+                                'type'       => 'attendance_group_alert',
                                 'matiere'    => $matiere,
                             ]
                         );

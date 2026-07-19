@@ -23,8 +23,7 @@ class Classe extends Model
 
     public function enseignants()
     {
-        return $this->belongsToMany(Enseignant::class, 'classe_enseignant')
-            ->select('enseignants.id', 'enseignants.prenom', 'enseignants.nom', 'enseignants.matiere');
+        return $this->belongsToMany(Enseignant::class, 'classe_enseignant');
     }
 
     public function eleves()
