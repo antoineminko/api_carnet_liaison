@@ -30,8 +30,16 @@ class PushNotificationService
 
         try {
             $notification = Notification::create($title, $body);
-            $stringifiedData = array_map('strval', $data);
-
+            $stringifiedData = [];
+            foreach ($data as $key => $value) {
+                if (is_array($value) || is_object($value)) {
+                    $stringifiedData[$key] = json_encode($value);
+                } elseif (is_bool($value)) {
+                    $stringifiedData[$key] = $value ? 'true' : 'false';
+                } else {
+                    $stringifiedData[$key] = (string) $value;
+                }
+            }
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
                 ->withData($stringifiedData);
