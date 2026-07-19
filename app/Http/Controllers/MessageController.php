@@ -318,9 +318,7 @@ class MessageController extends Controller
                     }
                 } else {
                     if (!empty($parent->fcm_token)) {
-                        $this->notificationService->sendAndSave(
-                            'parent',
-                            $parent->id,
+                        $this->notificationService->sendPushOnly(
                             $parent->fcm_token,
                             $titleForParent,
                             $bodyForParent, // Texte générique pour le push
