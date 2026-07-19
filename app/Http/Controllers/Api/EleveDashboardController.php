@@ -53,6 +53,10 @@ class EleveDashboardController extends Controller
         $principalId = $classe?->prof_principal_id;
         $teachers = collect();
 
+        \Log::info('[EleveDashboard] eleve_id=' . $id . ' classe_id=' . ($classe?->id) . ' profPrincipalId=' . $principalId);
+        \Log::info('[EleveDashboard] enseignants count=' . ($classe?->enseignants?->count() ?? 0));
+        \Log::info('[EleveDashboard] enseignants ids=' . ($classe?->enseignants?->pluck('id')->implode(',') ?? 'none'));
+
         if ($profPrincipal) {
             $teachers->push([
                 'id'          => $profPrincipal->id,
