@@ -33,4 +33,9 @@ class CahierTexte extends Model
     {
         return $this->belongsTo(Enseignant::class);
     }
+
+    public function devoirs()
+    {
+        return $this->hasMany(Devoir::class, 'cahier_texte_id');
+    }
 }

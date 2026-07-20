@@ -136,9 +136,23 @@ class CahierTexteController extends Controller
             return response()->json(['error' => 'Élève non trouvé'], 404);
         }
 
-        $cahiers = CahierTexte::where('classe_id', $eleve->classe_id)
+        $cahiers = CahierTexte::with('devoirs')
+            ->where('classe_id', $eleve->classe_id)
             ->orderBy('date_cours', 'desc')
             ->get();
+
+        return response()->json(['success' => true, 'cahiers' => $cahiers]);
+    }
+
+    public function getByClasse(Request $request, $classeId)
+    {
+        $query = CahierTexte::with('devoirs')->where('classe_id', $classeId);
+        
+        if ($request->has('matiere')) {
+            $query->where('matiere', $request->matiere);
+        }
+
+        $cahiers = $query->orderBy('date_cours', 'desc')->get();
 
         return response()->json(['success' => true, 'cahiers' => $cahiers]);
     }

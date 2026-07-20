@@ -26,7 +26,9 @@ class DevoirController extends Controller
             'type' => 'required|in:maison,classe,exercice,recherche,revision,autre',
             'titre' => 'required|string',
             'description' => 'required|string',
-            'date_remise' => 'required|date',
+            'date_remise' => 'nullable|date',
+            'date_realisation' => 'nullable|date',
+            'cahier_texte_id' => 'nullable|integer|exists:cahier_textes,id',
             'eleves' => 'nullable|array', // IDs des élèves sélectionnés (optionnel)
             'eleves.*' => 'integer|exists:eleves,id',
         ]);
@@ -47,6 +49,8 @@ class DevoirController extends Controller
             'titre' => $request->titre,
             'description' => $request->description,
             'date_remise' => $request->date_remise,
+            'date_realisation' => $request->date_realisation,
+            'cahier_texte_id' => $request->cahier_texte_id,
         ]);
 
         // Si des élèves spécifiques sont sélectionnés, les lier au devoir
@@ -96,7 +100,14 @@ class DevoirController extends Controller
         ];
         $typeLabel = $typeLabels[$request->type] ?? 'Devoir';
         $title = "{$typeLabel} - {$request->matiere}";
-        $body = "{$request->titre}\nÀ rendre pour le " . date('d/m/Y', strtotime($request->date_remise));
+        
+        $dateText = '';
+        if ($request->date_remise) {
+            $dateText = "\nÀ rendre pour le " . date('d/m/Y', strtotime($request->date_remise));
+        } elseif ($request->date_realisation) {
+            $dateText = "\nPrévu pour le " . date('d/m/Y', strtotime($request->date_realisation));
+        }
+        $body = "{$request->titre}{$dateText}";
 
         foreach ($parentsGrouped as $parentId => $children) {
             $parent = ParentUser::find($parentId);
@@ -111,7 +122,7 @@ class DevoirController extends Controller
                     'classe_id' => (string) $request->classe_id,
                     'matiere' => $request->matiere,
                     'titre' => $request->titre,
-                    'date_remise' => $request->date_remise,
+                    'date_remise' => $request->date_remise ?? $request->date_realisation,
                     'eleve_id' => (string) $childTarget->eleve_id,
                     'eleve_nom' => trim(($childTarget->eleve_prenom ?? '') . ' ' . ($childTarget->eleve_nom ?? '')),
                 ];

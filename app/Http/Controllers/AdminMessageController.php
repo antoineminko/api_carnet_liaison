@@ -201,71 +201,28 @@ class AdminMessageController extends Controller
         $allParentIds = $elevesParents->flatten()->pluck('parent_id')->unique()->toArray();
         $parentsData = ParentUser::whereIn('id', $allParentIds)->get()->keyBy('id');
 
-        $existingConversations = Conversation::where('ecole_id', $ecoleId)
-            ->whereNull('enseignant_id')
-            ->whereIn('parent_id', $allParentIds)
-            ->get()
-            ->keyBy('parent_id');
-
-        $messagesData = [];
-        $conversationsToUpdate = [];
         $now = now();
-        $processedParentsForTextual = [];
 
         foreach ($elevesList as $eleveId) {
-            $adminInfo = null;
-
-            if ($request->type !== 'textual') {
-                $adminInfo = \App\Models\AdminInformation::create([
-                    'eleve_id'        => $eleveId,
-                    'type'            => $request->type,
-                    'titre'           => $request->titre ?? 'Information Administration',
-                    'contenu'         => $content,
-                    'fichier_url'     => $fichierUrl,
-                    'montant'         => $request->montant,
-                    'montant_paye'    => $request->montant_paye,
-                    'montant_restant' => $request->montant_restant,
-                    'is_read'         => false,
-                ]);
-            }
+            // Toujours créer une AdminInformation, même si c'est 'textual' (on le passe en 'info')
+            $typeInfo = $request->type === 'textual' ? 'info' : $request->type;
+            
+            $adminInfo = \App\Models\AdminInformation::create([
+                'eleve_id'        => $eleveId,
+                'type'            => $typeInfo,
+                'titre'           => $request->titre ?? 'Information Administration',
+                'contenu'         => $content,
+                'fichier_url'     => $fichierUrl,
+                'montant'         => $request->montant,
+                'montant_paye'    => $request->montant_paye,
+                'montant_restant' => $request->montant_restant,
+                'is_read'         => false,
+            ]);
 
             $parents = $elevesParents->get($eleveId, collect());
 
             foreach ($parents as $pivot) {
                 $parentId = $pivot->parent_id;
-
-                if ($request->type === 'textual') {
-                    if (!in_array($parentId, $processedParentsForTextual)) {
-                        if ($existingConversations->has($parentId)) {
-                            $conversation = $existingConversations->get($parentId);
-                            if ($conversation->status !== 'accepted') {
-                                $conversationsToUpdate[] = $conversation->id;
-                                $conversation->status = 'accepted';
-                            }
-                        } else {
-                            $conversation = Conversation::create([
-                                'ecole_id'      => $ecoleId,
-                                'enseignant_id' => null,
-                                'parent_id'     => $parentId,
-                                'status'        => 'accepted'
-                            ]);
-                            $existingConversations->put($parentId, $conversation);
-                        }
-
-                        $messagesData[] = [
-                            'conversation_id' => $conversation->id,
-                            'sender_type'     => 'admin',
-                            'sender_id'       => $ecoleId,
-                            'content'         => $content,
-                            'fichier_url'     => $fichierUrl,
-                            'is_read'         => false,
-                            'created_at'      => $now,
-                            'updated_at'      => $now,
-                        ];
-                        
-                        $processedParentsForTextual[] = $parentId;
-                    }
-                }
 
                 if (!in_array($parentId, $parentIdsSet)) {
                     $parentIdsSet[] = $parentId;
@@ -282,28 +239,19 @@ class AdminMessageController extends Controller
                         $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
 
                         $notificationData = [
-                            'type' => $request->type === 'textual' ? 'admin_message' : 'admin_info',
+                            'type' => 'admin_info',
+                            'eleve_id' => (string) $eleveId,
                         ];
-
-                        if ($request->type !== 'textual') {
-                            $notificationData['eleve_id'] = (string) $eleveId;
-                        }
 
                         if ($fichierUrl) {
                             $notificationData['fichier_url'] = $fichierUrl;
                         }
 
-                        if ($request->type === 'textual' && isset($existingConversations[$parentId])) {
-                            $notificationData['conversation_id'] = (string) $existingConversations[$parentId]->id;
-                        } elseif (isset($adminInfo)) {
+                        if (isset($adminInfo)) {
                             $notificationData['admin_info_id'] = (string) $adminInfo->id;
                         }
 
-                        if ($request->type === 'textual') {
-                            $this->notificationService->sendPushOnly($parent->fcm_token, $title, $body, $notificationData);
-                        } else {
-                            $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
-                        }
+                        $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
                     }
 
                     if ($parent && !empty($parent->email)) {
@@ -331,14 +279,6 @@ class AdminMessageController extends Controller
                     $sentCount++;
                 }
             }
-        }
-
-        if (!empty($conversationsToUpdate)) {
-            Conversation::whereIn('id', $conversationsToUpdate)->update(['status' => 'accepted']);
-        }
-
-        if (!empty($messagesData)) {
-            Message::insert($messagesData);
         }
 
         return response()->json([

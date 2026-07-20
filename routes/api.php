@@ -85,6 +85,7 @@ Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
 Route::post('/devoirs', [DevoirController::class, 'store']);
 Route::post('/cahier-textes', [CahierTexteController::class, 'store']);
 Route::get('/eleves/{eleveId}/cahier-textes', [CahierTexteController::class, 'getByEleve']);
+Route::get('/classes/{classeId}/cahier-textes', [CahierTexteController::class, 'getByClasse']);
 Route::post('/ai/summarize', [\App\Http\Controllers\Api\AiController::class, 'summarize']);
 Route::get('/enseignants/{teacherId}/classes', [DevoirController::class, 'getTeacherClasses']);
 Route::get('/classes/{classeId}/eleves-devoirs', [DevoirController::class, 'getClassStudents']);

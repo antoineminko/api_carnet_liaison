@@ -125,12 +125,15 @@ class EleveDashboardController extends Controller
             ->leftJoin('devoir_eleve', 'devoirs.id', '=', 'devoir_eleve.devoir_id')
             ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
             ->where('devoirs.classe_id', $eleve->classe_id)
-            ->where('devoirs.date_remise', '>=', date('Y-m-d', strtotime('-30 days')))
+            ->where(function($q) {
+                $q->where('devoirs.date_remise', '>=', date('Y-m-d', strtotime('-30 days')))
+                  ->orWhere('devoirs.date_realisation', '>=', date('Y-m-d', strtotime('-30 days')));
+            })
             ->where(function ($query) use ($id) {
                 $query->whereNull('devoir_eleve.eleve_id')
                       ->orWhere('devoir_eleve.eleve_id', $id);
             })
-            ->orderBy('devoirs.date_remise', 'asc')
+            ->orderBy(DB::raw('COALESCE(devoirs.date_remise, devoirs.date_realisation)'), 'asc')
             ->select(
                 'devoirs.id',
                 'devoirs.titre',
@@ -138,6 +141,8 @@ class EleveDashboardController extends Controller
                 'devoirs.matiere',
                 'devoirs.type',
                 'devoirs.date_remise',
+                'devoirs.date_realisation',
+                'devoirs.cahier_texte_id',
                 'devoirs.created_at',
                 'devoirs.enseignant_id',
                 'devoir_eleve.eleve_id as ciblage_eleve_id',
@@ -154,6 +159,8 @@ class EleveDashboardController extends Controller
                 'matiere' => $hw->matiere,
                 'type' => $hw->type ?? 'maison',
                 'date_remise' => $hw->date_remise,
+                'date_realisation' => $hw->date_realisation,
+                'cahier_texte_id' => $hw->cahier_texte_id,
                 'created_at' => $hw->created_at,
                 'enseignant_id' => $hw->enseignant_id,
                 'enseignant_nom' => trim(($hw->prof_prenom ?? '') . ' ' . ($hw->prof_nom ?? '')),
