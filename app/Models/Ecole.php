@@ -26,11 +26,8 @@ class Ecole extends Model
         'telephone',
         'password_admin',
     ];
-
-    // Hide sensitive fields from API responses
+   
     protected $hidden = ['password_admin'];
-
-    // ─── Relationships ────────────────────────────────────────────────────────
 
     public function classes()
     {

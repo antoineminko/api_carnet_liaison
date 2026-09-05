@@ -26,10 +26,10 @@ class SendPushNotificationJob implements ShouldQueue
     public $body;
     public $data;
     
-    // Le nombre de retries avant d'abandonner
+    
     public $tries = 3;
     
-    // Backoff : on attend 10s, puis 30s, puis 60s entre chaque échec réseau
+   
     public function backoff()
     {
         return [10, 30, 60];
@@ -50,7 +50,6 @@ class SendPushNotificationJob implements ShouldQueue
             return;
         }
 
-        Log::info('[SendPushNotificationJob] Tentative d\'envoi vers token=' . substr($this->token, 0, 20) . '...');
 
         try {
             $notification = Notification::create($this->title, $this->body);
@@ -61,7 +60,6 @@ class SendPushNotificationJob implements ShouldQueue
                 ->withData($stringifiedData);
 
             $messaging->send($message);
-            Log::info('[SendPushNotificationJob] Succès pour token=' . substr($this->token, 0, 20) . '...');
 
         } catch (NotFound $e) {
             Log::error('[SendPushNotificationJob] Token NotFound: ' . $e->getMessage() . ' | Suppression du token: ' . substr($this->token, 0, 20) . '...');
@@ -76,11 +74,11 @@ class SendPushNotificationJob implements ShouldQueue
                 $this->removeInvalidToken($this->token);
             } else {
                 Log::error('[SendPushNotificationJob] Erreur FCM réseau/serveur temporaire: ' . $e->getMessage());
-                throw $e; // Remet en file d'attente
+                throw $e; 
             }
         } catch (\Exception $e) {
             Log::error('[SendPushNotificationJob] Erreur générale (réseau/VPN?): ' . $e->getMessage());
-            throw $e; // Remet en file d'attente pour retry
+            throw $e; 
         }
     }
 
@@ -89,7 +87,6 @@ class SendPushNotificationJob implements ShouldQueue
         try {
             ParentUser::where('fcm_token', $token)->update(['fcm_token' => null]);
             Enseignant::where('fcm_token', $token)->update(['fcm_token' => null]);
-            Log::info('[SendPushNotificationJob] Nettoyage réussi du token expiré en base.');
         } catch (\Exception $e) {
             Log::error('[SendPushNotificationJob] Erreur lors du nettoyage du token: ' . $e->getMessage());
         }

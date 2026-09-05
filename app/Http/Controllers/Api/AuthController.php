@@ -133,8 +133,7 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // The admin credentials are stored on the ecoles table
-        // as email_admin and password_admin (hashed)
+        /* Authentification administrative : Les identifiants sont stockés au niveau de l'entité Ecole */
         $school = \App\Models\Ecole::where('email_admin', $request->email)->first();
 
         if (!$school) {
@@ -145,7 +144,7 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'message' => 'Mot de passe incorrect.'], 401);
         }
 
-        // Revoke previous tokens to prevent session accumulation
+        /* Révocation des jetons précédents pour garantir une session unique par établissement */
         $school->tokens()->where('name', 'admin_token')->delete();
         $token = $school->createToken('admin_token')->plainTextToken;
 

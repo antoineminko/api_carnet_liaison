@@ -20,7 +20,7 @@ class MessageController extends Controller
         $this->notificationService = $notificationService;
     }
 
-    // Récupérer les messages d'une conversation (ou la créer si elle n'existe pas)
+    /* Extraction du fil de discussion ou initialisation d'une nouvelle session de messagerie */
     public function getConversation(Request $request)
     {
         $conversation_id = $request->input('conversation_id');
@@ -79,7 +79,7 @@ class MessageController extends Controller
         ]);
     }
 
-    // Initier une conversation (Opt-in)
+    /* Processus d'initialisation sécurisée d'une conversation avec demande d'opt-in */
     public function initiateConversation(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -117,7 +117,7 @@ class MessageController extends Controller
             'is_read' => false
         ]);
 
-        // Envoyer notification push à l'autre partie
+        /* Routage de la demande d'ouverture de canal vers l'interlocuteur cible */
         $this->sendConversationInitiationNotification($conversation, $request->sender_type, $request->initial_message);
 
         return response()->json([
@@ -134,7 +134,7 @@ class MessageController extends Controller
     {
         try {
             if ($senderType === 'enseignant') {
-                // L'enseignant initie, on notifie le parent
+                /* Scénario d'initialisation par le corps professoral vers les familles */
                 $parent = ParentUser::find($conversation->parent_id);
                 $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
                     ->where('id', $conversation->enseignant_id)
@@ -158,13 +158,13 @@ class MessageController extends Controller
                             'enseignant_nom' => $enseignantName,
                             'subject' => $conversation->subject,
                             'status' => 'pending',
-                            'action' => 'validate_conversation', // Le parent doit valider la liaison
+                            'action' => 'validate_conversation',
                             'sent_at' => now()->timestamp
                         ]
                     );
                 }
             } else {
-                // Le parent initie, on notifie l'enseignant
+                /* Scénario d'initialisation par les familles vers le corps professoral */
                 $parent = ParentUser::find($conversation->parent_id);
                 $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
                     ->where('id', $conversation->enseignant_id)
@@ -188,7 +188,7 @@ class MessageController extends Controller
                             'parent_nom' => $parentName,
                             'subject' => $conversation->subject,
                             'status' => 'pending',
-                            'action' => 'validate_conversation', // L'enseignant doit valider la liaison
+                            'action' => 'validate_conversation',
                             'sent_at' => now()->timestamp
                         ]
                     );
@@ -199,7 +199,7 @@ class MessageController extends Controller
         }
     }
 
-    // Accepter ou Refuser la conversation
+    /* Traitement de l'opt-in : Validation ou rejet de la demande de liaison */
     public function updateConversationStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
@@ -256,11 +256,11 @@ class MessageController extends Controller
 
                 $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
 
-                // Si le parent a refusé (le plus probable), notifier l'enseignant
+                /* Routage du refus vers l'enseignant lorsque la famille décline la liaison */
                 if ($isParentAction && !empty($enseignant->fcm_token)) {
                     $this->notificationService->sendAndSave('enseignant', $enseignant->id, $enseignant->fcm_token, $title, $body, $payload);
                 } 
-                // Si l'enseignant a refusé, notifier le parent
+                /* Routage du refus vers la famille lorsque l'enseignant décline la liaison */
                 elseif (!$isParentAction && !empty($parent->fcm_token)) {
                     $this->notificationService->sendAndSave('parent', $parent->id, $parent->fcm_token, $title, $body, $payload);
                 }
@@ -269,14 +269,14 @@ class MessageController extends Controller
 
                 $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
 
-                // ── Textes conformes à la règle métier ──
+
                 $titleForTeacher = "✅ Liaison acceptée";
                 $bodyForTeacher  = "{$parentName} a accepté la demande de discussion.";
 
                 $titleForParent = "✅ Liaison établie";
                 $bodyForParent  = "Vous êtes désormais autorisé à communiquer avec {$enseignantName}. Vos échanges sont sécurisés et une copie est conservée par l'administration de l'établissement conformément au règlement interne.";
 
-                // ── Identifier les enfants concernés ──
+                /* Résolution du contexte élèves rattaché à cette liaison parent-enseignant */
                 $enfantsIds = \Illuminate\Support\Facades\DB::table('eleve_parents')
                     ->where('parent_id', $parent->id)
                     ->pluck('eleve_id');
@@ -285,18 +285,18 @@ class MessageController extends Controller
                     ->where('enseignant_id', $enseignant->id)
                     ->pluck('classe_id');
 
-                // Enfants du parent qui sont dans une des classes de l'enseignant
+
                 $elevesCibles = \App\Models\Eleve::whereIn('id', $enfantsIds)
                     ->whereIn('classe_id', $enseignantClasses)
                     ->get();
 
-                // Si aucun enfant en commun, on sécurise en prenant le premier (ex: admin)
+                /* Fallback de sécurité : Sélection du premier enfant rattaché au compte parent en l'absence de correspondance stricte */
                 if ($elevesCibles->isEmpty()) {
                     $firstEleve = \App\Models\Eleve::find($enfantsIds->first());
                     if ($firstEleve) $elevesCibles = collect([$firstEleve]);
                 }
 
-                // ── Notifier l'AUTRE partie par PUSH (une seule fois) ──
+                /* Déclenchement de la notification d'acceptation de liaison */
                 $payloadPush = [
                     'type'            => 'chat_accepted',
                     'conversation_id' => (string)$conversation->id,
@@ -306,7 +306,6 @@ class MessageController extends Controller
                 ];
 
                 if ($isParentAction) {
-                    \Log::info("[LIAISON] Le parent {$parent->id} accepte. Token enseignant {$enseignant->id} = " . ($enseignant->fcm_token ?? 'VIDE'));
                     if (!empty($enseignant->fcm_token)) {
                         try {
                             $this->notificationService->sendAndSave(
@@ -317,30 +316,27 @@ class MessageController extends Controller
                                 $bodyForTeacher,
                                 $payloadPush
                             );
-                            \Log::info("[LIAISON] sendAndSave terminé pour enseignant {$enseignant->id}");
                         } catch (\Exception $e) {
                             \Log::error("[LIAISON] Erreur sendAndSave pour enseignant: " . $e->getMessage());
                         }
-                    } else {
-                        \Log::warning("[LIAISON] Impossible de notifier l'enseignant {$enseignant->id} car son fcm_token est vide.");
                     }
                 } else {
                     if (!empty($parent->fcm_token)) {
                         $this->notificationService->sendPushOnly(
                             $parent->fcm_token,
                             $titleForParent,
-                            $bodyForParent, // Texte générique pour le push
+                            $bodyForParent,
                             $payloadPush
                         );
                     }
                 }
 
-                // ── Créer les traces et bannières POUR CHAQUE ENFANT concerné ──
+                /* Génération des traces d'audit et des informations administratives pour chaque enfant lié */
                 foreach ($elevesCibles as $eleve) {
                     $enfantPrenom = $eleve->prenom ?? 'votre enfant';
                     $infoMessage = "Vous êtes désormais autorisé à communiquer avec {$enseignantName} concernant {$enfantPrenom}. Vos échanges sont sécurisés et une copie est conservée par l'administration de l'établissement conformément au règlement interne.";
 
-                    // Enregistrement AdminInformation (stocké dans Infos -> Informations)
+
                     \App\Models\AdminInformation::create([
                         'eleve_id' => $eleve->id,
                         'type'     => 'info',
@@ -349,14 +345,13 @@ class MessageController extends Controller
                         'is_read'  => false
                     ]);
 
-                    // Créer la bannière (Notification BDD) pour le parent, qu'il ait accepté ou l'enseignant
-                    // Ainsi la bannière apparaît dans son interface et mène vers la fiche enfant
+
                     $notifParentPayload = [
                         'type'            => 'chat_accepted',
                         'conversation_id' => (string)$conversation->id,
                         'status'          => 'accepted',
                         'enseignant_nom'  => $enseignantName,
-                        'eleve_id'        => (string)$eleve->id, // Pour la navigation Flutter
+                        'eleve_id'        => (string)$eleve->id,
                         'child_name'      => $enfantPrenom,
                     ];
                     
@@ -365,7 +360,7 @@ class MessageController extends Controller
                         'user_id'   => $parent->id,
                         'type'      => 'chat_accepted',
                         'title'     => $titleForParent,
-                        'message'   => $infoMessage, // Texte personnalisé avec le nom de l'enfant
+                        'message'   => $infoMessage,
                         'data'      => $notifParentPayload,
                     ]);
                 }
@@ -376,7 +371,7 @@ class MessageController extends Controller
     }
 
 
-    // Envoyer un nouveau message
+    /* Traitement et persistance d'un nouveau message dans une conversation établie */
     public function sendMessage(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -410,12 +405,12 @@ class MessageController extends Controller
             'is_read' => false
         ]);
 
-        // Envoyer une notification push au destinataire
+        /* Déclenchement conditionnel des alertes Push pour les nouveaux messages */
         $senderName = $request->sender_type === 'enseignant' ? "Un enseignant" : ($request->sender_type === 'parent' ? "Un parent" : "L'École");
         $title = "Nouveau message de {$senderName}";
         $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
 
-        // Notifier le parent si l'expéditeur est l'enseignant ou admin
+        /* Scénario : Message émis par l'établissement (Enseignant/Admin) vers une famille */
         if ($request->sender_type !== 'parent') {
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
@@ -433,7 +428,7 @@ class MessageController extends Controller
             }
         }
 
-        // Notifier l'enseignant si l'expéditeur est le parent
+        /* Scénario : Message émis par une famille vers le corps professoral */
         if ($request->sender_type === 'parent' && $conversation && $conversation->enseignant_id) {
             $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
                 ->where('id', $conversation->enseignant_id)
@@ -459,9 +454,6 @@ class MessageController extends Controller
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
             ->leftJoin('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
-            ->leftJoin('eleve_parents', 'conversations.parent_id', '=', 'eleve_parents.parent_id')
-            ->leftJoin('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
             ->where('conversations.parent_id', $parent_id)
             ->select(
                 'conversations.id as conversation_id',
@@ -473,19 +465,41 @@ class MessageController extends Controller
                 'enseignants.nom as enseignant_nom',
                 'enseignants.prenom as enseignant_prenom',
                 'enseignants.matiere as enseignant_matiere',
-                'ecoles.nom as admin_name',
-                'eleves.nom as eleve_nom',
-                'eleves.prenom as eleve_prenom',
-                'classes.nom as classe_nom',
-                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id AND messages.sender_type != "parent" AND messages.is_read = 0) as unread_count')
-            )
-            ->groupBy(
-                'conversations.id', 'conversations.ecole_id', 'conversations.enseignant_id',
-                'conversations.status', 'conversations.subject',
-                'enseignants.nom', 'enseignants.prenom', 'enseignants.matiere',
-                'ecoles.nom', 'eleves.nom', 'eleves.prenom', 'classes.nom'
+                'ecoles.nom as admin_name'
             )
             ->get();
+
+        /* Optimisation: Récupération en une seule fois des métadonnées (N+1 évité) */
+        $conversationIds = $conversations->pluck('conversation_id')->toArray();
+        
+        $unreadCounts = \Illuminate\Support\Facades\DB::table('messages')
+            ->select('conversation_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as count'))
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('sender_type', '!=', 'parent')
+            ->where('is_read', false)
+            ->groupBy('conversation_id')
+            ->pluck('count', 'conversation_id');
+
+        /* Optionnel: Prendre le premier élève du parent pour l'affichage UI */
+        $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
+            ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+            ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+            ->where('eleve_parents.parent_id', $parent_id)
+            ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
+            ->first();
+
+        foreach ($conversations as $conv) {
+            $conv->unread_count = $unreadCounts->get($conv->conversation_id, 0);
+            if ($eleve) {
+                $conv->eleve_nom = $eleve->nom;
+                $conv->eleve_prenom = $eleve->prenom;
+                $conv->classe_nom = $eleve->classe_nom;
+            } else {
+                $conv->eleve_nom = null;
+                $conv->eleve_prenom = null;
+                $conv->classe_nom = null;
+            }
+        }
 
         return response()->json([
             'success'       => true,
@@ -493,7 +507,7 @@ class MessageController extends Controller
         ]);
     }
 
-    // Obtenir toutes les conversations pour un enseignant
+    /* Extraction des canaux de communication rattachés à un enseignant spécifique */
     public function getConversationsForTeacher($enseignant_id)
     {
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
@@ -511,35 +525,53 @@ class MessageController extends Controller
             )
             ->get();
 
-        // Pour chaque conversation, récupérer le dernier message et le contexte de l'élève
+        /* Optimisation (N+1) : Récupérer en masse les derniers messages et compteurs */
+        $conversationIds = $conversations->pluck('conversation_id')->toArray();
+        $parentIds = $conversations->pluck('parent_id')->filter()->unique()->toArray();
+
+        $unreadCounts = \Illuminate\Support\Facades\DB::table('messages')
+            ->select('conversation_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as count'))
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('sender_type', '!=', 'enseignant')
+            ->where('is_read', false)
+            ->groupBy('conversation_id')
+            ->pluck('count', 'conversation_id');
+
+        /* Dernière version du message par conversation en utilisant ROW_NUMBER ou une sous-requête (optimisation simple) */
+        $lastMessages = \Illuminate\Support\Facades\DB::table('messages')
+            ->whereIn('id', function($q) use ($conversationIds) {
+                $q->select(\Illuminate\Support\Facades\DB::raw('MAX(id)'))->from('messages')->whereIn('conversation_id', $conversationIds)->groupBy('conversation_id');
+            })->get()->keyBy('conversation_id');
+
+        /* Précharger le premier élève de chaque parent pour affichage */
+        $eleves = collect();
+        if (!empty($parentIds)) {
+            $eleves = \Illuminate\Support\Facades\DB::table('eleve_parents')
+                ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
+                ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
+                ->whereIn('eleve_parents.parent_id', $parentIds)
+                ->select('eleve_parents.parent_id', 'eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
+                ->get()
+                ->groupBy('parent_id')
+                ->map(function($items) { return $items->first(); });
+        }
+
+        /* Hydratation des métadonnées sans requêtes dans la boucle */
         foreach ($conversations as $conv) {
-            $lastMessage = Message::where('conversation_id', $conv->conversation_id)
-                ->orderBy('created_at', 'desc')
-                ->first();
-                
+            $lastMessage = $lastMessages->get($conv->conversation_id);
             $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
-            $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
+            $conv->last_message_time = $lastMessage ? \Carbon\Carbon::parse($lastMessage->created_at)->format('H:i') : '';
+            $conv->unread_count = $unreadCounts->get($conv->conversation_id, 0);
 
-            // Compter les messages non lus
-            $unreadCount = Message::where('conversation_id', $conv->conversation_id)
-                ->where('sender_type', '!=', 'enseignant')
-                ->where('is_read', false)
-                ->count();
-            $conv->unread_count = $unreadCount;
-
-            if ($conv->parent_id) {
-                $eleve = \Illuminate\Support\Facades\DB::table('eleve_parents')
-                    ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
-                    ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
-                    ->where('eleve_parents.parent_id', $conv->parent_id)
-                    ->select('eleves.nom', 'eleves.prenom', 'classes.nom as classe_nom')
-                    ->first();
-
-                if ($eleve) {
-                    $conv->eleve_nom = $eleve->nom;
-                    $conv->eleve_prenom = $eleve->prenom;
-                    $conv->classe_nom = $eleve->classe_nom;
-                }
+            if ($conv->parent_id && $eleves->has($conv->parent_id)) {
+                $eleve = $eleves->get($conv->parent_id);
+                $conv->eleve_nom = $eleve->nom;
+                $conv->eleve_prenom = $eleve->prenom;
+                $conv->classe_nom = $eleve->classe_nom;
+            } else {
+                $conv->eleve_nom = null;
+                $conv->eleve_prenom = null;
+                $conv->classe_nom = null;
             }
         }
 
@@ -549,13 +581,13 @@ class MessageController extends Controller
         ]);
     }
 
-    // Obtenir les conversations admin-enseignant pour un enseignant
+    /* Extraction des canaux de communication administratifs rattachés à un enseignant */
     public function getAdminConversationsForTeacher($enseignant_id)
     {
         $conversations = \Illuminate\Support\Facades\DB::table('conversations')
             ->leftJoin('ecoles', 'conversations.ecole_id', '=', 'ecoles.id')
             ->where('conversations.enseignant_id', $enseignant_id)
-            ->whereNull('conversations.parent_id') // Conversations sans parent = admin
+            ->whereNull('conversations.parent_id')
             ->select(
                 'conversations.id as conversation_id',
                 'conversations.ecole_id',
@@ -566,21 +598,28 @@ class MessageController extends Controller
             )
             ->get();
 
-        // Pour chaque conversation, récupérer le dernier message
+        $conversationIds = $conversations->pluck('conversation_id')->toArray();
+
+        $unreadCounts = \Illuminate\Support\Facades\DB::table('messages')
+            ->select('conversation_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as count'))
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('sender_type', '!=', 'enseignant')
+            ->where('is_read', false)
+            ->groupBy('conversation_id')
+            ->pluck('count', 'conversation_id');
+
+        $lastMessages = \Illuminate\Support\Facades\DB::table('messages')
+            ->whereIn('id', function($q) use ($conversationIds) {
+                $q->select(\Illuminate\Support\Facades\DB::raw('MAX(id)'))->from('messages')->whereIn('conversation_id', $conversationIds)->groupBy('conversation_id');
+            })->get()->keyBy('conversation_id');
+
+        /* Hydratation des métadonnées des conversations administratives */
         foreach ($conversations as $conv) {
-            $lastMessage = Message::where('conversation_id', $conv->conversation_id)
-                ->orderBy('created_at', 'desc')
-                ->first();
+            $lastMessage = $lastMessages->get($conv->conversation_id);
                 
             $conv->last_message = $lastMessage ? $lastMessage->content : 'Aucun message';
-            $conv->last_message_time = $lastMessage ? $lastMessage->created_at->format('H:i') : '';
-
-            // Compter les messages non lus
-            $unreadCount = Message::where('conversation_id', $conv->conversation_id)
-                ->where('sender_type', '!=', 'enseignant')
-                ->where('is_read', false)
-                ->count();
-            $conv->unread_count = $unreadCount;
+            $conv->last_message_time = $lastMessage ? \Carbon\Carbon::parse($lastMessage->created_at)->format('H:i') : '';
+            $conv->unread_count = $unreadCounts->get($conv->conversation_id, 0);
         }
 
         return response()->json([

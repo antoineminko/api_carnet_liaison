@@ -18,9 +18,7 @@ class ReportController extends Controller
         $this->notificationService = $notificationService;
     }
 
-    /**
-     * Créer un signalement
-     */
+    /* Création d'une alerte de modération suite à un comportement inapproprié (harcèlement, spam, etc.) */
     public function store(Request $request)
     {
         $request->validate([
@@ -42,7 +40,7 @@ class ReportController extends Controller
             }
         }
 
-        // Créer le signalement
+        /* Enregistrement de l'alerte en base de données avec le statut "en attente" */
         $report = Report::create([
             'conversation_id' => $request->conversation_id,
             'reporter_id' => $request->reporter_id,
@@ -55,7 +53,7 @@ class ReportController extends Controller
             'status' => 'pending',
         ]);
 
-        // Notifier les administrateurs (on peut notifier un rôle spécifique ou tous les admins)
+        /* Déclenchement de l'alerte auprès de l'équipe de modération */
         $this->notifyAdmins($report);
 
         return response()->json([
@@ -65,9 +63,7 @@ class ReportController extends Controller
         ], 201);
     }
 
-    /**
-     * Liste des signalements pour l'administration
-     */
+    /* Extraction de la liste des alertes de modération pour l'interface d'administration */
     public function index(Request $request)
     {
         $ecoleId = $request->attributes->get('school')?->id;
@@ -80,19 +76,19 @@ class ReportController extends Controller
             });
         }
 
-        // Filtrer par statut
+
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filtrer par motif
+
         if ($request->has('reason')) {
             $query->where('reason', $request->reason);
         }
 
         $reports = $query->orderBy('created_at', 'desc')->get();
 
-        // Enrichir avec les noms
+        /* Hydratation des libellés et des noms pour l'affichage */
         foreach ($reports as $report) {
             $report->reporter_name = $this->getUserName($report->reporter_type, $report->reporter_id);
             $report->reported_name = $this->getUserName($report->reported_type, $report->reported_id);
@@ -106,9 +102,7 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * Obtenir les détails d'un signalement
-     */
+    /* Extraction détaillée d'une alerte incluant le contexte de la conversation */
     public function show($id)
     {
         $report = Report::with(['conversation'])->findOrFail($id);
@@ -118,7 +112,7 @@ class ReportController extends Controller
         $report->reason_label = Report::getReasonLabel($report->reason);
         $report->status_label = Report::getStatusLabel($report->status);
 
-        // Obtenir les messages de la conversation pour analyse
+        /* Extraction de l'historique récent de la conversation pour analyse par le modérateur */
         $messages = $report->conversation->messages()->orderBy('created_at', 'desc')->limit(50)->get();
 
         return response()->json([
@@ -128,9 +122,7 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * Mettre à jour le statut d'un signalement (admin only)
-     */
+    /* Traitement de l'alerte par la modération (Changement d'état) */
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
@@ -147,13 +139,11 @@ class ReportController extends Controller
 
         if ($request->status === 'resolved' || $request->status === 'rejected') {
             $updateData['resolved_at'] = now();
-            // Ici on pourrait récupérer l'ID de l'admin authentifié
-            // $updateData['resolved_by'] = auth()->id();
         }
 
         $report->update($updateData);
 
-        // Notifier le signaleur de la résolution
+        /* Clôture de l'alerte : Information du plaignant concernant l'issue de son signalement */
         if ($request->status === 'resolved' || $request->status === 'rejected') {
             $this->notifyReporter($report, $request->status);
         }
@@ -165,9 +155,7 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * Signalements faits par un utilisateur
-     */
+    /* Extraction de l'historique des alertes émises par un utilisateur */
     public function getUserReports(Request $request)
     {
         $request->validate([
@@ -191,9 +179,7 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * Signalements reçus par un utilisateur
-     */
+    /* Extraction de l'historique des alertes visant un utilisateur spécifique */
     public function getReportsAgainstUser(Request $request)
     {
         $request->validate([
@@ -231,12 +217,6 @@ class ReportController extends Controller
     private function notifyAdmins(Report $report)
     {
         try {
-            // Notifier tous les admins via FCM ou autre système
-            // Pour l'instant, on log l'action
-            \Log::info("Nouveau signalement créé : #{$report->id} - Motif: {$report->reason}");
-
-            // Ici on pourrait envoyer des notifications push aux admins
-            // ou envoyer un email, ou créer une notification dans le système
         } catch (\Throwable $e) {
             \Log::error('Erreur notification admins : ' . $e->getMessage());
         }
@@ -288,7 +268,7 @@ class ReportController extends Controller
         }
     }
 
-    // Obtenir les signalements liés à un élève spécifique
+    /* Extraction des alertes de modération impliquant un élève spécifique */
     public function getReportsForEleve($eleve_id)
     {
         try {

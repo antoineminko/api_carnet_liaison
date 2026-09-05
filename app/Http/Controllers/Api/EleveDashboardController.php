@@ -29,7 +29,7 @@ class EleveDashboardController extends Controller
             ->where('date', $today)
             ->first();
 
-        // 1. Présences du jour
+        /* Récupération de l'état de présence de l'élève pour la journée en cours */
         $attendance = null;
         if ($attendanceRow) {
             $statutFr = match($attendanceRow->status) {
@@ -49,13 +49,9 @@ class EleveDashboardController extends Controller
             ];
         }
 
-        // 2. Professeurs de l'élève — déjà chargés via eager loading (0 requête supplémentaire)
+        /* Extraction de l'équipe pédagogique (optimisée via eager loading pour éviter le N+1) */
         $principalId = $classe?->prof_principal_id;
         $teachers = collect();
-
-        \Log::info('[EleveDashboard] eleve_id=' . $id . ' classe_id=' . ($classe?->id) . ' profPrincipalId=' . $principalId);
-        \Log::info('[EleveDashboard] enseignants count=' . ($classe?->enseignants?->count() ?? 0));
-        \Log::info('[EleveDashboard] enseignants ids=' . ($classe?->enseignants?->pluck('id')->implode(',') ?? 'none'));
 
         if ($profPrincipal) {
             $teachers->push([
@@ -79,7 +75,7 @@ class EleveDashboardController extends Controller
             }
         }
 
-        // 3. Notes (Notes de la semaine et Historique)
+        /* Agrégation des évaluations récentes et constitution de l'historique des notes */
         $gradesRaw = DB::table('notes')
             ->join('devoirs', 'notes.devoir_id', '=', 'devoirs.id')
             ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
@@ -99,7 +95,7 @@ class EleveDashboardController extends Controller
 
         $grades = $gradesRaw->map(function($g) {
             $isBad = false;
-            // logic for < 5/20 or < 3/10
+            /* Identification des résultats insuffisants nécessitant une attention particulière */
             $val = floatval(str_replace(',', '.', $g->note));
             if (str_contains($g->note, '/10')) {
                 if ($val < 3) $isBad = true;
@@ -118,9 +114,9 @@ class EleveDashboardController extends Controller
             ];
         })->toArray();
 
-        $grades_history = $grades; // Historique complet
+        $grades_history = $grades;
         
-        // 4. Devoirs à venir (filtrer selon ciblage spécifique ou classe entière)
+        /* Filtrage des devoirs à venir : inclut les devoirs généraux de la classe et ceux ciblés spécifiquement sur cet élève */
         $homeworksRaw = DB::table('devoirs')
             ->leftJoin('devoir_eleve', 'devoirs.id', '=', 'devoir_eleve.devoir_id')
             ->leftJoin('enseignants', 'devoirs.enseignant_id', '=', 'enseignants.id')
@@ -169,7 +165,7 @@ class EleveDashboardController extends Controller
             ];
         });
 
-        // 5. Actualités (News de l'école)
+        /* Chargement du flux d'actualités de l'établissement */
         $actualites = [
             [
                 'id' => 1,
@@ -183,7 +179,7 @@ class EleveDashboardController extends Controller
             ],
         ];
 
-        // 6. Informations administratives & Finances
+        /* Récupération des circulaires administratives et situations financières */
         $dbAdminInfos = \App\Models\AdminInformation::where('eleve_id', $id)
             ->orderByDesc('created_at')
             ->get();
@@ -200,7 +196,7 @@ class EleveDashboardController extends Controller
 
         $finances = null;
 
-        // 7. Rendez-vous
+        /* Planning des rendez-vous validés avec le corps enseignant */
         $appointments = DB::table('appointments')
             ->leftJoin('enseignants', 'appointments.enseignant_id', '=', 'enseignants.id')
             ->where('appointments.eleve_id', $id)
@@ -208,8 +204,16 @@ class EleveDashboardController extends Controller
             ->orderBy('date_heure', 'asc')
             ->get();
 
-        // 8. Notifications non lues
+        /* Calcul du compteur des éléments non lus pour l'affichage du badge d'alerte sur mobile */
         $unread_notifications_count = $dbAdminInfos->where('is_read', false)->count();
+
+        if ($request->has('parent_id')) {
+            $apiNotificationsCount = \App\Models\Notification::where('user_type', 'parent')
+                ->where('user_id', $request->parent_id)
+                ->where('is_read', false)
+                ->count();
+            $unread_notifications_count += $apiNotificationsCount;
+        }
 
         return response()->json([
             'eleve'                      => array_merge($eleve->toArray(), [

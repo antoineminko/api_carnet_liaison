@@ -40,40 +40,65 @@ class CallController extends Controller
             ], 403);
         }
 
-        // Déterminer le receveur
+        /* Identification de l'interlocuteur cible en fonction de l'initiateur */
         $receiverId = $request->caller_type === 'enseignant'
             ? $conversation->parent_id
             : $conversation->enseignant_id;
         $receiverType = $request->caller_type === 'enseignant' ? 'parent' : 'enseignant';
 
-        // --- DEBUT CONTROLE SECURITE & PRESENCE ---
         $isAvailable = true;
 
         if ($request->caller_type === 'parent') {
-            // Parent -> Enseignant : on check si l'enseignant est connecté à cette école
+            /* Vérification de la disponibilité : Un enseignant doit être connecté et actif depuis moins de 60 minutes sur l'école concernée */
             $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $receiverId)->first();
             if (!$enseignant) {
                 $isAvailable = false;
             } else {
-                // Vérifier s'il est actif dans cette école depuis moins de 2 minutes
                 $lastSeen = $enseignant->last_seen_at ? \Carbon\Carbon::parse($enseignant->last_seen_at) : null;
-                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 2;
+                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 60;
                 if (!$isActive || $enseignant->active_ecole_id != $conversation->ecole_id) {
                     $isAvailable = false;
                 }
             }
         } else {
-            // Enseignant -> Parent : on check juste si le parent est actif (< 2 mins)
+            /* Vérification de la disponibilité : Le parent doit être connecté à l'application récemment (60 minutes) */
             $parent = ParentUser::find($receiverId);
             if (!$parent) {
                 $isAvailable = false;
             } else {
                 $lastSeen = $parent->last_seen_at ? \Carbon\Carbon::parse($parent->last_seen_at) : null;
-                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 2;
+                $isActive = $lastSeen && $lastSeen->diffInMinutes(now()) <= 60;
                 if (!$isActive) {
                     $isAvailable = false;
                 }
             }
+        }
+
+        /* Vérification du statut occupé : le destinataire est-il déjà en appel ? */
+        $isBusy = Call::where(function($q) use ($receiverId, $receiverType) {
+            $q->where(function($sub1) use ($receiverId, $receiverType) {
+                $sub1->where('caller_id', $receiverId)->where('caller_type', $receiverType);
+            })->orWhere(function($sub2) use ($receiverId, $receiverType) {
+                $sub2->where('receiver_id', $receiverId)->where('receiver_type', $receiverType);
+            });
+        })->whereIn('status', ['ringing', 'accepted'])->exists();
+
+        if ($isBusy) {
+            $call = Call::create([
+                'conversation_id' => $request->conversation_id,
+                'caller_id' => $request->caller_id,
+                'caller_type' => $request->caller_type,
+                'receiver_id' => $receiverId,
+                'receiver_type' => $receiverType,
+                'type' => $request->type,
+                'status' => 'busy',
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'call' => $call,
+                'message' => 'Le correspondant est actuellement en ligne.',
+            ], 200);
         }
 
         if (!$isAvailable) {
@@ -97,9 +122,7 @@ class CallController extends Controller
                 'message' => 'Le correspondant est indisponible.',
             ], 200);
         }
-        // --- FIN CONTROLE SECURITE & PRESENCE ---
-
-        // Créer l'appel
+        /* Enregistrement de la session d'appel en base de données */
         $call = Call::create([
             'conversation_id' => $request->conversation_id,
             'caller_id' => $request->caller_id,
@@ -110,7 +133,7 @@ class CallController extends Controller
             'status' => 'ringing',
         ]);
 
-        // Envoyer notification push au receveur
+        /* Déclenchement de la sonnerie (notification Push) sur l'appareil du destinataire */
         $this->sendCallNotification($call, 'ringing');
 
         return response()->json([
@@ -139,7 +162,7 @@ class CallController extends Controller
             'started_at' => now(),
         ]);
 
-        // Notifier l'appelant
+
         $this->sendCallNotification($call, 'accepted');
 
         return response()->json([
@@ -172,7 +195,7 @@ class CallController extends Controller
             'rejection_reason' => $request->reason,
         ]);
 
-        // Notifier l'appelant
+
         $this->sendCallNotification($call, 'rejected', $request->reason);
 
         return response()->json([
@@ -222,7 +245,7 @@ class CallController extends Controller
         if ($call->status === 'ringing') {
             $call->update(['status' => 'missed']);
 
-            // Notifier l'appelant
+
             $this->sendCallNotification($call, 'missed');
         }
 
@@ -258,7 +281,6 @@ class CallController extends Controller
     {
         try {
             if ($status === 'ringing') {
-                // Notifier le receveur
                 if ($call->receiver_type === 'parent') {
                     $parent = ParentUser::find($call->receiver_id);
                     if ($parent && !empty($parent->fcm_token)) {
@@ -280,7 +302,6 @@ class CallController extends Controller
                         );
                     }
                 } else {
-                    // Notifier l'enseignant
                     $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')
                         ->where('id', $call->receiver_id)
                         ->first();
@@ -304,10 +325,8 @@ class CallController extends Controller
                     }
                 }
             } elseif ($status === 'rejected') {
-                // Notifier l'appelant du rejet
                 $this->notifyCaller($call, 'rejected', $reason);
             } elseif ($status === 'missed') {
-                // Notifier l'appelant de l'appel manqué
                 $this->notifyCaller($call, 'missed');
             }
         } catch (\Throwable $e) {
@@ -412,7 +431,23 @@ class CallController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $calls->transform(function ($call) use ($userId, $role) {
+        /* Optimisation : Préchargement des noms pour éviter le problème N+1 dans l'historique */
+        $teacherIds = [];
+        $parentIds = [];
+        foreach ($calls as $call) {
+            $otherType = ($call->caller_type === $role && $call->caller_id == $userId) ? $call->receiver_type : $call->caller_type;
+            $otherId = ($call->caller_type === $role && $call->caller_id == $userId) ? $call->receiver_id : $call->caller_id;
+            if ($otherType === 'enseignant') {
+                $teacherIds[] = $otherId;
+            } else {
+                $parentIds[] = $otherId;
+            }
+        }
+
+        $teachers = \Illuminate\Support\Facades\DB::table('enseignants')->whereIn('id', array_unique($teacherIds))->get()->keyBy('id');
+        $parents = ParentUser::whereIn('id', array_unique($parentIds))->get()->keyBy('id');
+
+        $calls->transform(function ($call) use ($userId, $role, $teachers, $parents) {
             $otherType = ($call->caller_type === $role && $call->caller_id == $userId) 
                 ? $call->receiver_type 
                 : $call->caller_type;
@@ -423,13 +458,11 @@ class CallController extends Controller
 
             $name = 'Utilisateur';
             if ($otherType === 'enseignant') {
-                $enseignant = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $otherId)->first();
-                if ($enseignant) {
+                if ($enseignant = $teachers->get($otherId)) {
                     $name = trim("{$enseignant->prenom} {$enseignant->nom}");
                 }
             } else {
-                $parent = ParentUser::find($otherId);
-                if ($parent) {
+                if ($parent = $parents->get($otherId)) {
                     $name = trim("{$parent->prenom} {$parent->nom}");
                 }
             }
@@ -515,26 +548,24 @@ class CallController extends Controller
     {
         $call = Call::findOrFail($callId);
 
-        // L'offre : toujours disponible, jamais consommée (le receveur peut poller plusieurs fois)
+        /* Signaling (WebRTC) : L'offre (Offer SDP) reste persistante et lisible plusieurs fois pour palier aux instabilités réseau */
         $offer = CallSignaling::where('call_id', $callId)
             ->where('type', 'offer')
             ->orderBy('created_at', 'desc')
             ->first();
 
-        // Answer et ICE candidates : consommés une seule fois (processed)
+        /* Signaling (WebRTC) : La réponse (Answer) et les candidats ICE sont consommés une seule fois (One-time read) */
         $others = CallSignaling::where('call_id', $callId)
             ->where('processed', false)
             ->whereIn('type', ['answer', 'ice_candidate'])
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // Marquer uniquement answer et ICE candidates comme traités
         CallSignaling::where('call_id', $callId)
             ->where('processed', false)
             ->whereIn('type', ['answer', 'ice_candidate'])
             ->update(['processed' => true]);
 
-        // Organiser les données
         $result = [
             'offer' => null,
             'answer' => null,

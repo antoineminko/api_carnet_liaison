@@ -23,7 +23,6 @@ class AdminMessageController extends Controller
         $this->notificationService = $notificationService;
     }
 
-    // 1. Envoyer un message depuis l'Admin (appweb) vers un Parent, une Classe ou les parents d'un Élève
     public function sendMessageToParent(Request $request)
     {
         $ecole = $request->attributes->get('school');
@@ -57,7 +56,7 @@ class AdminMessageController extends Controller
             $fichierUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
         }
 
-        // Enregistrer le broadcast global
+        /* Enregistrement de la diffusion globale de l'information dans la base de données */
         $cibles = [];
         if ($request->filled('tous_etablissement')) $cibles['tous_etablissement'] = true;
         if ($request->filled('tous_enseignants')) $cibles['tous_enseignants'] = true;
@@ -75,13 +74,13 @@ class AdminMessageController extends Controller
             'cibles' => $cibles,
         ]);
 
-        // Cas des enseignants
+        /* Traitement spécifique pour les destinataires de type "Enseignant" */
         $isTeacherMessage = $request->filled('enseignant_id') || $request->tous_enseignants;
         
         if ($isTeacherMessage) {
             $enseignantsList = [];
             if ($request->tous_enseignants) {
-                // Get all teachers from this school
+                /* Extraction complète du corps professoral lié à l'établissement */
                 $enseignantsList = DB::table('classe_enseignant')
                     ->join('classes', 'classe_enseignant.classe_id', '=', 'classes.id')
                     ->where('classes.ecole_id', $ecoleId)
@@ -102,7 +101,7 @@ class AdminMessageController extends Controller
                     [
                         'ecole_id'      => $ecoleId,
                         'enseignant_id' => $ensId,
-                        'parent_id'     => null, // Conversation Admin ↔ Enseignant
+                        'parent_id'     => null, /* Initialisation du canal de communication bilatéral Admin-Enseignant */
                     ],
                     ['status' => 'accepted']
                 );
@@ -120,8 +119,22 @@ class AdminMessageController extends Controller
                     'is_read'         => false,
                 ]);
 
-                // Ajouter ici notification Push pour Enseignant si implémenté
-
+                /* Real-time sync: Send push notification to the teacher */
+                $enseignantTarget = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $ensId)->first();
+                if ($enseignantTarget && !empty($enseignantTarget->fcm_token)) {
+                    $title = "Nouveau message de l'Administration";
+                    $body = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
+                    
+                    $this->notificationService->sendPushOnly(
+                        $enseignantTarget->fcm_token,
+                        $title,
+                        $body,
+                        [
+                            'conversation_id' => (string) $conversation->id,
+                            'type' => 'admin_message'
+                        ]
+                    );
+                }
                 $sentCount++;
             }
 
@@ -132,14 +145,14 @@ class AdminMessageController extends Controller
             ], 201);
         }
 
-        // Récupérer les élèves concernés au lieu de juste les parents, pour les admin_informations
+        /* Identification des élèves concernés pour le rattachement des informations administratives */
         $elevesList = [];
 
-        // Cas 1 : Envoi à un élève spécifique
+        /* Ciblage unitaire : Envoi nominatif à un élève */
         if ($request->filled('eleve_id')) {
             $elevesList = [$request->eleve_id];
         }
-        // Cas 2 : Envoi à une classe entière ou plusieurs classes, ou par niveaux
+        /* Ciblage groupé : Envoi filtré par classes ou par niveaux académiques */
         elseif ($request->filled('classe_id') || $request->filled('niveaux')) {
             $query = DB::table('eleves')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
@@ -147,7 +160,6 @@ class AdminMessageController extends Controller
             
             $query->where(function($q) use ($request) {
                 if ($request->filled('classe_id')) {
-                    // classe_id peut être un int ou un array (ex: [1, 2])
                     $classes = is_array($request->classe_id) ? $request->classe_id : explode(',', $request->classe_id);
                     $q->whereIn('classe_id', $classes);
                 }
@@ -165,7 +177,7 @@ class AdminMessageController extends Controller
 
             $elevesList = $query->pluck('eleves.id')->unique()->toArray();
         }
-        // Cas 3 : Envoi à un parent unique (on récupère tous ses enfants dans l'école)
+        /* Ciblage parent : Agrégation de tous les enfants rattachés au parent dans le contexte de l'établissement */
         elseif ($request->filled('parent_id')) {
             $elevesList = DB::table('eleve_parents')
                 ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id')
@@ -176,7 +188,7 @@ class AdminMessageController extends Controller
                 ->unique()
                 ->toArray();
         }
-        // Cas 4 : Envoi global à toute l'école
+        /* Ciblage massif : Diffusion à l'intégralité de l'établissement */
         else {
             $elevesList = DB::table('eleves')
                 ->join('classes', 'eleves.classe_id', '=', 'classes.id')
@@ -192,7 +204,7 @@ class AdminMessageController extends Controller
         $sentCount = 0;
         $parentIdsSet = [];
 
-        // Précharger les relations pour éviter les requêtes N+1
+        /* Optimisation : Préchargement des liaisons familiales pour prévenir la surcharge de requêtes (N+1) */
         $elevesParents = DB::table('eleve_parents')
             ->whereIn('eleve_id', $elevesList)
             ->get()
@@ -204,7 +216,7 @@ class AdminMessageController extends Controller
         $now = now();
 
         foreach ($elevesList as $eleveId) {
-            // Toujours créer une AdminInformation, même si c'est 'textual' (on le passe en 'info')
+            /* Normalisation du type de message pour garantir sa persistance en tant qu'information administrative */
             $typeInfo = $request->type === 'textual' ? 'info' : $request->type;
             
             $adminInfo = \App\Models\AdminInformation::create([
@@ -257,7 +269,7 @@ class AdminMessageController extends Controller
                     if ($parent && !empty($parent->email)) {
                         try {
                             $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
-                            $emailContent = "Bonjour {$parent->prenom} {$parent->nom},\n\n" . $content . "\n\nCordialement,\nL'Administration";
+                            $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
                             
                             Mail::raw($emailContent, function($msg) use ($parent, $emailTitle, $request) {
                                 $msg->to($parent->email)
@@ -272,7 +284,7 @@ class AdminMessageController extends Controller
                                 }
                             });
                         } catch (\Exception $e) {
-                            Log::error("Erreur envoi email au parent {$parent->id}: " . $e->getMessage());
+                            Log::error('Erreur envoi email au parent ' . $parent->id . ': ' . $e->getMessage());
                         }
                     }
 
@@ -283,12 +295,12 @@ class AdminMessageController extends Controller
 
         return response()->json([
             'success'    => true,
-            'message'    => "Message traité et envoyé à {$sentCount} parent(s) avec succès.",
+            'message'    => 'Message traité et envoyé à ' . $sentCount . ' parent(s) avec succès.',
             'sent_count' => $sentCount,
         ], 201);
     }
 
-    // 2. Supervision des échanges Parent ↔ Enseignant
+    /* Interface de supervision et de modération des canaux de communication entre parents et enseignants */
     public function getCommunications(Request $request)
     {
         $ecole_id = $request->attributes->get('school')->id;
@@ -356,7 +368,7 @@ class AdminMessageController extends Controller
         ]);
     }
 
-    // Récupérer les broadcasts (annonces) de l'Admin
+    /* Extraction de l'historique des diffusions massives (Broadcasts) de l'administration */
     public function getAdminBroadcasts(Request $request)
     {
         $ecole_id = $request->attributes->get('school')->id;
@@ -368,7 +380,7 @@ class AdminMessageController extends Controller
                 $cibles = is_string($b->cibles) ? json_decode($b->cibles, true) : $b->cibles;
                 if (!$cibles) return false;
                 
-                // Exclure les messages envoyés individuellement (à un seul élève ou parent)
+                /* Filtrage contextuel : Exclusion des communications nominatives de la vue d'ensemble des diffusions */
                 if (isset($cibles['eleve_id']) && count($cibles) === 1) return false;
                 if (isset($cibles['parent_id']) && count($cibles) === 1) return false;
                 
@@ -386,8 +398,6 @@ class AdminMessageController extends Controller
                 } elseif (isset($cibles['classe_id'])) {
                     $classes = is_array($cibles['classe_id']) ? $cibles['classe_id'] : explode(',', $cibles['classe_id']);
                     $targetLabel = count($classes) > 1 ? count($classes) . ' classes' : 'Classe spécifique';
-                    
-                    // Optionnel : on pourrait aller chercher le nom des classes, mais simple "X classes" ou "Classe" suffit
                     $classesNoms = DB::table('classes')->whereIn('id', $classes)->pluck('nom')->toArray();
                     if (!empty($classesNoms)) {
                         $targetLabel = implode(', ', $classesNoms);
@@ -412,12 +422,12 @@ class AdminMessageController extends Controller
         return response()->json(['broadcasts' => $broadcasts]);
     }
 
-    // Récupérer les conversations où l'Admin est impliqué (Admin <-> Parent ou Admin <-> Enseignant)
+    /* Consolidation de tous les canaux de messagerie impliquant l'administration */
     public function getAdminConversations(Request $request)
     {
         $ecole_id = $request->attributes->get('school')->id;
 
-        // Admin <-> Parents
+        /* Extraction des threads avec les familles */
         $parentConversations = DB::table('conversations')
             ->join('parent_users', 'conversations.parent_id', '=', 'parent_users.id')
             ->leftJoin('messages', function ($join) {
@@ -435,7 +445,7 @@ class AdminMessageController extends Controller
                 'messages.created_at as last_message_date'
             );
 
-        // Admin <-> Enseignants
+        /* Extraction des threads avec le corps pédagogique */
         $enseignantConversations = DB::table('conversations')
             ->join('enseignants', 'conversations.enseignant_id', '=', 'enseignants.id')
             ->leftJoin('messages', function ($join) {
@@ -469,7 +479,7 @@ class AdminMessageController extends Controller
             ->orderBy('created_at', 'asc')
             ->get();
             
-        // Marquer les messages entrants comme lus
+        /* Acquittement automatique des messages entrants non lus dans la conversation */
         Message::where('conversation_id', $conversation_id)
             ->where('sender_type', '!=', 'admin')
             ->where('is_read', false)
@@ -514,7 +524,7 @@ class AdminMessageController extends Controller
             'is_read'         => false,
         ]);
 
-        // Push notification logic could be added here
+
         
         return response()->json([
             'success' => true,

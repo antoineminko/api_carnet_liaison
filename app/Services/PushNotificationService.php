@@ -13,20 +13,27 @@ use App\Models\Enseignant;
 class PushNotificationService
 {
     protected $messaging;
+    protected static $sentPushHashes = [];
 
     public function __construct(Messaging $messaging)
     {
         $this->messaging = $messaging;
     }
 
-    public function sendToToken($token, $title, $body, $data = [])
+    public function sendToToken($token, $title, $body, $data = [], $badgeCount = 1)
     {
         if (empty($token)) {
             \Log::warning('[Push] sendToToken: token vide, envoi annulé. Title=' . $title);
             return false;
         }
 
-        \Log::info('[Push] sendToToken: envoi synchrone vers token=' . substr($token, 0, 20) . '... title=' . $title);
+        /* Anti-doublon : Évite d'envoyer la même notification push plusieurs fois au même token durant la même requête */
+        $hash = md5($token . $title . $body);
+        if (isset(self::$sentPushHashes[$hash])) {
+            \Log::info("[Push] Anti-doublon déclenché pour le token " . substr($token, 0, 10) . "...");
+            return true;
+        }
+        self::$sentPushHashes[$hash] = true;
 
         try {
             $notification = Notification::create($title, $body);
@@ -40,12 +47,36 @@ class PushNotificationService
                     $stringifiedData[$key] = (string) $value;
                 }
             }
+            }
+
+            $apnsConfig = \Kreait\Firebase\Messaging\ApnsConfig::fromArray([
+                'headers' => [
+                    'apns-priority' => '10',
+                ],
+                'payload' => [
+                    'aps' => [
+                        'badge' => $badgeCount,
+                        'sound' => 'default',
+                        'content-available' => 1,
+                    ],
+                ],
+            ]);
+
+            $androidConfig = \Kreait\Firebase\Messaging\AndroidConfig::fromArray([
+                'priority' => 'high',
+                'notification' => [
+                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                    'sound' => 'default',
+                ],
+            ]);
+
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification($notification)
-                ->withData($stringifiedData);
+                ->withData($stringifiedData)
+                ->withApnsConfig($apnsConfig)
+                ->withAndroidConfig($androidConfig);
 
             $this->messaging->send($message);
-            \Log::info('[Push] sendToToken: succès pour token=' . substr($token, 0, 20) . '...');
             return true;
 
         } catch (NotFound $e) {
@@ -67,12 +98,9 @@ class PushNotificationService
         }
     }
 
-    /**
-     * Envoyer une notification push et l'enregistrer en base de données.
-     */
+    /* Emission du Push FCM et persistance de la notification dans l'historique utilisateur */
     public function sendAndSave($userType, $userId, $token, $title, $body, $data = [])
     {
-        // Enregistrer en base
         $notification = \App\Models\Notification::create([
             'user_type' => $userType,
             'user_id' => $userId,
@@ -84,12 +112,30 @@ class PushNotificationService
 
         $data['notification_id'] = (string) $notification->id;
 
-        return $this->sendToToken($token, $title, $body, $data);
+        /* Calcul du badge global pour l'utilisateur */
+        $unreadCount = \App\Models\Notification::where('user_type', $userType)
+            ->where('user_id', $userId)
+            ->where('is_read', false)->count();
+        
+        $adminInfoCount = 0;
+        if ($userType === 'parent') {
+            $elevesIds = \Illuminate\Support\Facades\DB::table('eleve_parents')
+                ->where('parent_id', $userId)
+                ->pluck('eleve_id')->toArray();
+            
+            if (!empty($elevesIds)) {
+                $adminInfoCount = \Illuminate\Support\Facades\DB::table('admin_informations')
+                    ->whereIn('eleve_id', $elevesIds)
+                    ->where('is_read', false)->count();
+            }
+        }
+
+        $badgeCount = $unreadCount + $adminInfoCount;
+
+        return $this->sendToToken($token, $title, $body, $data, $badgeCount);
     }
 
-    /**
-     * Envoyer une notification push sans l'enregistrer en base de données.
-     */
+    /* Emission d'un Push FCM éphémère (sans persistance en base de données) */
     public function sendPushOnly($token, $title, $body, $data = [])
     {
         return $this->sendToToken($token, $title, $body, $data);
@@ -100,7 +146,6 @@ class PushNotificationService
         try {
             ParentUser::where('fcm_token', $token)->update(['fcm_token' => null]);
             Enseignant::where('fcm_token', $token)->update(['fcm_token' => null]);
-            \Log::info('[Push] Nettoyage réussi du token expiré en base.');
         } catch (\Exception $e) {
             \Log::error('[Push] Erreur lors du nettoyage du token: ' . $e->getMessage());
         }

@@ -25,7 +25,7 @@ class AppointmentController extends Controller
      */
     public function store(Request $request)
     {
-        // Adaptation for Flutter app payload which uses 'type' and 'motif'
+        /* Rétrocompatibilité : Translation du payload Flutter natif (type, motif) vers le modèle interne (mode, objet) */
         if (!$request->has('mode') && $request->has('type')) {
             $mode = 'presentiel';
             if ($request->type === 'video') $mode = 'video';
@@ -47,7 +47,7 @@ class AppointmentController extends Controller
             'requester'     => 'required|in:parent,enseignant'
         ]);
 
-        // Récupérer les informations pour les notifications
+        /* Hydratation des entités nécessaires à la construction des notifications */
         $parent = ParentUser::find($request->parent_id);
         $enseignant = Enseignant::find($request->enseignant_id);
         $eleve = $request->eleve_id ? Eleve::find($request->eleve_id) : null;
@@ -59,14 +59,14 @@ class AppointmentController extends Controller
             ], 404);
         }
 
-        // Générer lien vidéo si mode = video
+        /* Création d'une salle de visioconférence unique via Jitsi si le mode l'exige */
         $lien_video = null;
         if ($request->mode === 'video') {
             $roomName = "RendezVous-" . Str::random(10);
             $lien_video = "https://meet.jit.si/" . $roomName;
         }
 
-        // Trouver l'ecole_id
+        /* Résolution du contexte d'établissement (ecole_id) */
         $ecole_id = null;
         if ($request->has('ecole_id')) {
             $ecole_id = $request->ecole_id;
@@ -89,9 +89,8 @@ class AppointmentController extends Controller
             'requester'     => $request->requester,
         ]);
 
-        // Envoi notification enrichie
+        /* Déclenchement de la notification Push vers la partie prenante cible */
         if ($request->requester === 'enseignant') {
-            // Notifier le parent
             if (!empty($parent->fcm_token)) {
                 $title = "📅 Nouveau rendez-vous proposé";
                 $enseignantNom = trim("{$enseignant->prenom} {$enseignant->nom}");
@@ -111,7 +110,6 @@ class AppointmentController extends Controller
                 ]);
             }
         } else {
-            // Notifier l'enseignant
             if (!empty($enseignant->fcm_token)) {
                 $title = "📅 Nouvelle demande de rendez-vous";
                 $parentNom = trim("{$parent->prenom} {$parent->nom}");
@@ -152,9 +150,27 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::with(['parent', 'enseignant', 'eleve'])->findOrFail($id);
 
+        /* Machine à états : Empêcher la modification d'un rendez-vous déjà finalisé */
+        if (in_array($appointment->statut, ['accepte', 'refuse', 'cancelled'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le statut de ce rendez-vous est déjà définitif et ne peut plus être modifié.'
+            ], 400);
+        }
+
+        /* Sécurité : Vérifier que c'est le bon interlocuteur qui répond (si l'app client envoie user_type) */
+        if ($request->has('user_type')) {
+            $expectedResponder = $appointment->requester === 'parent' ? 'enseignant' : 'parent';
+            if ($request->user_type !== $expectedResponder) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Non autorisé. Vous ne pouvez pas répondre à cette demande.'
+                ], 403);
+            }
+        }
         $updateData = ['statut' => $request->statut];
 
-        // Si report, enregistrer la nouvelle date proposée et la raison
+        /* Gestion du cycle de vie : Ajout de la contre-proposition lors d'un report */
         if ($request->statut === 'reporte') {
             $updateData['new_proposed_date'] = $request->new_proposed_date;
             $updateData['report_reason'] = $request->report_reason;
@@ -162,7 +178,7 @@ class AppointmentController extends Controller
 
         $appointment->update($updateData);
 
-        // Préparer les données pour les notifications
+
         $parent = $appointment->parent;
         $enseignant = $appointment->enseignant;
         $eleve = $appointment->eleve;
@@ -171,9 +187,8 @@ class AppointmentController extends Controller
         $parentNom = $parent ? trim("{$parent->prenom} {$parent->nom}") : 'Parent';
         $eleveNom = $eleve ? trim("{$eleve->prenom} {$eleve->nom}") : null;
 
-        // Déterminer qui notifier selon qui a fait la demande et qui met à jour
+        /* Routage de la notification de mise à jour vers la partie inverse de l'initiateur */
         if ($appointment->requester === 'parent') {
-            // Le parent a fait la demande, l'enseignant met à jour -> notifier le parent
             if ($parent && !empty($parent->fcm_token)) {
                 $this->sendStatusUpdateNotification(
                     $parent->fcm_token,
@@ -186,7 +201,6 @@ class AppointmentController extends Controller
                 );
             }
         } else {
-            // L'enseignant a fait la demande, le parent met à jour -> notifier l'enseignant
             if ($enseignant && !empty($enseignant->fcm_token)) {
                 $this->sendStatusUpdateNotification(
                     $enseignant->fcm_token,
@@ -221,7 +235,18 @@ class AppointmentController extends Controller
             ], 400);
         }
 
-        // Mettre à jour la date du rendez-vous avec la nouvelle date proposée
+        /* Sécurité : L'initiateur de la demande initiale est celui qui doit accepter la contre-proposition */
+        if ($request->has('user_type')) {
+            $expectedResponder = $appointment->requester; // Si le parent a demandé, le parent accepte la nouvelle date
+            if ($request->user_type !== $expectedResponder) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Non autorisé. Vous ne pouvez pas accepter cette contre-proposition.'
+                ], 403);
+            }
+        }
+
+        /* Validation de la contre-proposition et réinitialisation de l'état de report */
         $appointment->update([
             'date_heure' => $appointment->new_proposed_date,
             'statut' => 'accepte',
@@ -229,12 +254,10 @@ class AppointmentController extends Controller
             'report_reason' => null
         ]);
 
-        // Notifier l'autre partie
         $parent = ParentUser::find($appointment->parent_id);
         $enseignant = Enseignant::find($appointment->enseignant_id);
 
         if ($appointment->requester === 'parent') {
-            // Notifier l'enseignant que le parent a accepté la nouvelle date
             if ($enseignant && !empty($enseignant->fcm_token)) {
                 $parentNom = $parent ? trim("{$parent->prenom} {$parent->nom}") : 'Parent';
                 $dateFormatee = date('d/m/Y à H:i', strtotime($appointment->date_heure));
@@ -250,7 +273,6 @@ class AppointmentController extends Controller
                 );
             }
         } else {
-            // Notifier le parent que l'enseignant a accepté la nouvelle date
             if ($parent && !empty($parent->fcm_token)) {
                 $enseignantNom = $enseignant ? trim("{$enseignant->prenom} {$enseignant->nom}") : 'Enseignant';
                 $dateFormatee = date('d/m/Y à H:i', strtotime($appointment->date_heure));
@@ -355,7 +377,7 @@ class AppointmentController extends Controller
             $query->where('statut', $request->statut);
         }
 
-        // Filtrer par statuts spécifiques (pour les événements en attente/acceptés)
+
         if ($request->has('status_in')) {
             $query->whereIn('statut', $request->status_in);
         }
@@ -390,13 +412,20 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::with(['parent', 'enseignant'])->findOrFail($id);
 
-        // Seul le créateur peut annuler, ou les deux parties si accepté
+        /* Machine à états : Empêcher d'annuler un rendez-vous déjà annulé ou refusé */
+        if (in_array($appointment->statut, ['cancelled', 'refuse'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ce rendez-vous est déjà annulé ou refusé.'
+            ], 400);
+        }
+        /* Traitement de l'annulation par l'une des parties */
         $appointment->update([
             'statut' => 'cancelled',
             'motif' => $request->reason ?? 'Rendez-vous annulé'
         ]);
 
-        // Notifier l'autre partie
+
         $parent = $appointment->parent;
         $enseignant = $appointment->enseignant;
 
@@ -442,7 +471,7 @@ class AppointmentController extends Controller
     {
         $appointment = Appointment::findOrFail($id);
 
-        // Mettre à jour is_read dans la table notifications pour cet événement
+        /* Synchronisation : Acquittement automatique des notifications liées au rendez-vous */
         \App\Models\Notification::where('user_type', 'enseignant')
             ->where('user_id', $appointment->enseignant_id)
             ->whereIn('type', ['appointment_request', 'appointment_update'])
