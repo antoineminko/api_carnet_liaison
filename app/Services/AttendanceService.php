@@ -33,10 +33,14 @@ class AttendanceService
             ->where('classes.id', $classeId)
             ->value('ecoles.nom');
 
-        $matiere = DB::table('classe_enseignant')
+        // Récupération du nom complet du professeur pour l'afficher dans la notification
+        $enseignant = DB::table('classe_enseignant')
             ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
             ->where('classe_enseignant.classe_id', $classeId)
-            ->value('enseignants.matiere') ?? '';
+            ->select('enseignants.prenom', 'enseignants.nom', 'enseignants.matiere')
+            ->first();
+        $matiere = $enseignant->matiere ?? '';
+        $teacherName = $enseignant ? trim(($enseignant->prenom ?? '') . ' ' . ($enseignant->nom ?? '')) : '';
 
         $eleveIds = collect($data['attendances'])->pluck('eleve_id')->toArray();
         $eleves = Eleve::whereIn('id', $eleveIds)->get()->keyBy('id');
@@ -74,13 +78,13 @@ class AttendanceService
             }
         }
 
-        $this->notifyParents($targets, $ecoleNom, $matiere);
+        $this->notifyParents($targets, $ecoleNom, $matiere, $teacherName);
     }
 
     /**
      * Notifie les parents concernés par l'appel.
      */
-    protected function notifyParents($targets, $ecoleNom, $matiere)
+    protected function notifyParents($targets, $ecoleNom, $matiere, $teacherName = '')
     {
         /* Agrégation des notifications par parent pour éviter les envois multiples */
         $groupedTargets = $targets->groupBy('parent_id');
@@ -101,17 +105,20 @@ class AttendanceService
 
                 \App\Models\Notification::create([
                     'user_type' => 'parent',
-                    'user_id' => $parentId,
-                    'type' => 'attendance_alert',
-                    'title' => $title,
-                    'message' => $body,
-                    'data' => [
-                        'eleve_id'   => (string)$childTarget['eleve_id'],
-                        'child_name' => $childTarget['eleve_nom'],
-                        'ecole_nom'  => $ecoleNom ?? '',
-                        'type'       => 'attendance_alert',
-                        'status'     => (string)$childTarget['status'],
-                        'matiere'    => $matiere,
+                    'user_id'   => $parentId,
+                    'type'      => 'attendance_alert',
+                    'title'     => $title,
+                    'message'   => $body,
+                    'data'      => [
+                        'eleve_id'    => (string)$childTarget['eleve_id'],
+                        'eleve_nom'   => $childTarget['eleve_nom'],     // nom complet de l'enfant
+                        'child_name'  => $childTarget['eleve_nom'],     // alias pour compatibilité
+                        'school_name' => $ecoleNom ?? '',               // clé standard Flutter
+                        'ecole_nom'   => $ecoleNom ?? '',               // alias legacy
+                        'sender_name' => $teacherName,                  // nom du professeur
+                        'matiere'     => $matiere,
+                        'type'        => 'attendance_alert',
+                        'status'      => (string)$childTarget['status'],
                     ],
                     'is_read' => false,
                 ]);
