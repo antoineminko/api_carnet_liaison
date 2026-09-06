@@ -22,7 +22,7 @@ class AttendanceService
      * @param array $data Données validées
      * @return void
      */
-    public function submitAttendance(array $data)
+    public function submitAttendance(array $data, $enseignant = null)
     {
         $classeId = $data['classe_id'];
         $date = $data['date'];
@@ -34,13 +34,18 @@ class AttendanceService
             ->value('ecoles.nom');
 
         // Récupération du nom complet du professeur pour l'afficher dans la notification
-        $enseignant = DB::table('classe_enseignant')
-            ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
-            ->where('classe_enseignant.classe_id', $classeId)
-            ->select('enseignants.prenom', 'enseignants.nom', 'enseignants.matiere')
-            ->first();
-        $matiere = $enseignant->matiere ?? '';
-        $teacherName = $enseignant ? trim(($enseignant->prenom ?? '') . ' ' . ($enseignant->nom ?? '')) : '';
+        if ($enseignant) {
+            $matiere = $enseignant->matiere ?? '';
+            $teacherName = trim(($enseignant->prenom ?? '') . ' ' . ($enseignant->nom ?? ''));
+        } else {
+            $enseignantFallback = DB::table('classe_enseignant')
+                ->join('enseignants', 'classe_enseignant.enseignant_id', '=', 'enseignants.id')
+                ->where('classe_enseignant.classe_id', $classeId)
+                ->select('enseignants.prenom', 'enseignants.nom', 'enseignants.matiere')
+                ->first();
+            $matiere = $enseignantFallback->matiere ?? '';
+            $teacherName = $enseignantFallback ? trim(($enseignantFallback->prenom ?? '') . ' ' . ($enseignantFallback->nom ?? '')) : '';
+        }
 
         $eleveIds = collect($data['attendances'])->pluck('eleve_id')->toArray();
         $eleves = Eleve::whereIn('id', $eleveIds)->get()->keyBy('id');
@@ -58,7 +63,8 @@ class AttendanceService
                     'classe_id' => $classeId,
                 ],
                 [
-                    'status' => $status
+                    'status' => $status,
+                    'matiere' => $matiere
                 ]
             );
 

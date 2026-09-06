@@ -26,7 +26,7 @@ class AttendanceController extends Controller
         DB::beginTransaction();
 
         try {
-            $this->attendanceService->submitAttendance($request->validated());
+            $this->attendanceService->submitAttendance($request->validated(), $request->user());
 
             DB::commit();
 
