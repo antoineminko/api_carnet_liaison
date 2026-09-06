@@ -42,10 +42,10 @@ class EleveDashboardController extends Controller
                 'statut'        => $statutFr,
                 'date'          => $attendanceRow->date,
                 'heure_arrivee' => $ts ? date('H:i', strtotime($ts)) : null,
-                'matiere'       => $profPrincipal?->matiere,
+                'matiere'       => $profPrincipal?->matiere ?: ($classe?->enseignants->first()?->matiere ?: 'Cours'),
                 'enseignant_nom'=> $profPrincipal
                     ? trim($profPrincipal->prenom . ' ' . $profPrincipal->nom)
-                    : null,
+                    : ($classe?->enseignants->first() ? trim($classe->enseignants->first()->prenom . ' ' . $classe->enseignants->first()->nom) : null),
             ];
         }
 
