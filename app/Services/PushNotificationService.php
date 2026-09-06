@@ -47,7 +47,6 @@ class PushNotificationService
                     $stringifiedData[$key] = (string) $value;
                 }
             }
-            }
 
             $apnsConfig = \Kreait\Firebase\Messaging\ApnsConfig::fromArray([
                 'headers' => [
