@@ -60,6 +60,11 @@ class DevoirService
      */
     protected function notifyParents(Devoir $devoir, array $selectedEleves = [])
     {
+        /* Récupération des informations de l'enseignant et de l'école */
+        $devoir->load(['enseignant', 'classe.ecole']);
+        $teacherName = trim(($devoir->enseignant->prenom ?? '') . ' ' . ($devoir->enseignant->nom ?? ''));
+        $schoolName = $devoir->classe->ecole->nom ?? '';
+
         /* Résolution des cibles de notification */
         $targetsQuery = DB::table('eleve_parents')
             ->join('eleves', 'eleve_parents.eleve_id', '=', 'eleves.id');
@@ -117,6 +122,8 @@ class DevoirService
                     'date_remise' => $devoir->date_remise ?? $devoir->date_realisation,
                     'eleve_id' => (string) $childTarget->eleve_id,
                     'eleve_nom' => trim(($childTarget->eleve_prenom ?? '') . ' ' . ($childTarget->eleve_nom ?? '')),
+                    'sender_name' => $teacherName,
+                    'school_name' => $schoolName,
                 ];
 
                 \App\Models\Notification::create([
@@ -146,6 +153,8 @@ class DevoirService
                         'eleve_id' => (string) $firstChild->eleve_id,
                         'child_name' => trim(($firstChild->eleve_prenom ?? '') . ' ' . ($firstChild->eleve_nom ?? '')),
                         'matiere' => $devoir->matiere,
+                        'sender_name' => $teacherName,
+                        'school_name' => $schoolName,
                     ]
                 );
             }

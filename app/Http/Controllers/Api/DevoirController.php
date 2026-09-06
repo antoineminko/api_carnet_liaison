@@ -34,9 +34,7 @@ class DevoirController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Devoir créé avec succès.',
-            'devoir' => $devoir,
-            'eleves_concernes' => count($selectedEleves),
-            'notifications_envoyees' => $sentCount
+            'devoir' => $devoir
         ], 201);
     }
 
