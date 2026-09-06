@@ -207,9 +207,9 @@ class EleveDashboardController extends Controller
         /* Calcul du compteur des éléments non lus pour l'affichage du badge d'alerte sur mobile */
         $unread_notifications_count = $dbAdminInfos->where('is_read', false)->count();
 
-        if ($request->has('parent_id')) {
+        if (request()->has('parent_id')) {
             $apiNotificationsCount = \App\Models\Notification::where('user_type', 'parent')
-                ->where('user_id', $request->parent_id)
+                ->where('user_id', request()->parent_id)
                 ->where('is_read', false)
                 ->count();
             $unread_notifications_count += $apiNotificationsCount;
