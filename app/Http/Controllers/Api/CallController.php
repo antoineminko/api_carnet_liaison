@@ -144,11 +144,46 @@ class CallController extends Controller
     }
 
     /**
+     * Helper : Vérifie que l'utilisateur authentifié a le droit d'interagir avec l'appel.
+     */
+    private function authorizeCallAccess(Call $call)
+    {
+        $user = auth()->user();
+        if (!$user) return false;
+        
+        $userId = $user->id;
+        $userType = $user instanceof \App\Models\Enseignant ? 'enseignant' : 'parent';
+
+        return ($call->caller_type === $userType && $call->caller_id == $userId) || 
+               ($call->receiver_type === $userType && $call->receiver_id == $userId);
+    }
+
+    /**
+     * Récupérer les identifiants TURN temporaires (Metered.ca / Twilio)
+     */
+    public function getTurnCredentials()
+    {
+        // Placeholder pour l'instant (Phase 1)
+        // Vous devrez configurer les identifiants de votre fournisseur TURN ici
+        return response()->json([
+            'success' => true,
+            'iceServers' => [
+                ['urls' => 'stun:stun.l.google.com:19302'],
+                // ['urls' => 'turn:votre-serveur.metered.live:80', 'username' => 'user', 'credential' => 'pass']
+            ]
+        ]);
+    }
+
+    /**
      * Accepter un appel
      */
     public function accept($id)
     {
         $call = Call::findOrFail($id);
+
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
 
         if ($call->status !== 'ringing') {
             return response()->json([
@@ -183,6 +218,10 @@ class CallController extends Controller
 
         $call = Call::findOrFail($id);
 
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+
         if ($call->status !== 'ringing') {
             return response()->json([
                 'success' => false,
@@ -211,6 +250,10 @@ class CallController extends Controller
     public function end($id)
     {
         $call = Call::findOrFail($id);
+
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
 
         if ($call->status !== 'accepted') {
             return response()->json([
@@ -491,6 +534,11 @@ class CallController extends Controller
             'type' => 'required|string',
         ]);
 
+        $call = Call::findOrFail($callId);
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+
         CallSignaling::create([
             'call_id' => $callId,
             'type' => 'offer',
@@ -509,6 +557,11 @@ class CallController extends Controller
             'sdp' => 'required|string',
             'type' => 'required|string',
         ]);
+
+        $call = Call::findOrFail($callId);
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
 
         CallSignaling::create([
             'call_id' => $callId,
@@ -530,6 +583,11 @@ class CallController extends Controller
             'sdpMLineIndex' => 'nullable|integer',
         ]);
 
+        $call = Call::findOrFail($callId);
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+
         CallSignaling::create([
             'call_id' => $callId,
             'type' => 'ice_candidate',
@@ -547,6 +605,10 @@ class CallController extends Controller
     public function getSignaling($callId)
     {
         $call = Call::findOrFail($callId);
+
+        if (!$this->authorizeCallAccess($call)) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
 
         /* Signaling (WebRTC) : L'offre (Offer SDP) reste persistante et lisible plusieurs fois pour palier aux instabilités réseau */
         $offer = CallSignaling::where('call_id', $callId)
