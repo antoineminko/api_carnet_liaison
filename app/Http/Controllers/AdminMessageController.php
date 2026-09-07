@@ -235,60 +235,62 @@ class AdminMessageController extends Controller
 
             foreach ($parents as $pivot) {
                 $parentId = $pivot->parent_id;
+                $parent = $parentsData->get($parentId);
 
-                if (!in_array($parentId, $parentIdsSet)) {
-                    $parentIdsSet[] = $parentId;
-                    $parent = $parentsData->get($parentId);
+                if ($parent) {
+                    $title = "Nouveau message de l'Administration";
+                    if ($request->filled('titre')) {
+                        $title = $request->titre;
+                    } elseif ($request->type === 'finance') {
+                        $title = "Nouvelle information financière";
+                    }
                     
-                    if ($parent) {
-                        $title = "Nouveau message de l'Administration";
-                        if ($request->filled('titre')) {
-                            $title = $request->titre;
-                        } elseif ($request->type === 'finance') {
-                            $title = "Nouvelle information financière";
-                        }
+                    $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
+
+                    $notificationData = [
+                        'type' => 'admin_info',
+                        'eleve_id' => (string) $eleveId,
+                    ];
+
+                    if ($fichierUrl) {
+                        $notificationData['fichier_url'] = $fichierUrl;
+                    }
+
+                    if (isset($adminInfo)) {
+                        $notificationData['admin_info_id'] = (string) $adminInfo->id;
+                    }
+
+                    // On appelle sendAndSave pour CHAQUE enfant, pour avoir une notification DB par enfant
+                    $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
+
+                    // Pour l'envoi d'email, on ne le fait qu'une seule fois par parent
+                    if (!in_array($parentId, $parentIdsSet)) {
+                        $parentIdsSet[] = $parentId;
                         
-                        $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
-
-                        $notificationData = [
-                            'type' => 'admin_info',
-                            'eleve_id' => (string) $eleveId,
-                        ];
-
-                        if ($fichierUrl) {
-                            $notificationData['fichier_url'] = $fichierUrl;
-                        }
-
-                        if (isset($adminInfo)) {
-                            $notificationData['admin_info_id'] = (string) $adminInfo->id;
-                        }
-
-                        $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
-                    }
-
-                    if ($parent && !empty($parent->email)) {
-                        try {
-                            $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
-                            $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
-                            
-                            Mail::raw($emailContent, function($msg) use ($parent, $emailTitle, $request) {
-                                $msg->to($parent->email)
-                                    ->subject($emailTitle);
+                        if (!empty($parent->email)) {
+                            try {
+                                $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
+                                $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
                                 
-                                if ($request->hasFile('fichier')) {
-                                    $file = $request->file('fichier');
-                                    $msg->attach($file->getRealPath(), [
-                                        'as' => $file->getClientOriginalName(),
-                                        'mime' => $file->getClientMimeType(),
-                                    ]);
-                                }
-                            });
-                        } catch (\Exception $e) {
-                            Log::error('Erreur envoi email au parent ' . $parent->id . ': ' . $e->getMessage());
+                                Mail::raw($emailContent, function($msg) use ($parent, $emailTitle, $request) {
+                                    $msg->to($parent->email)
+                                        ->subject($emailTitle);
+                                    
+                                    if ($request->hasFile('fichier')) {
+                                        $file = $request->file('fichier');
+                                        $msg->attach($file->getRealPath(), [
+                                            'as' => $file->getClientOriginalName(),
+                                            'mime' => $file->getClientMimeType(),
+                                        ]);
+                                    }
+                                });
+                            } catch (\Exception $e) {
+                                Log::error('Erreur envoi email au parent ' . $parent->id . ': ' . $e->getMessage());
+                            }
                         }
-                    }
 
-                    $sentCount++;
+                        $sentCount++;
+                    }
                 }
             }
         }
