@@ -415,14 +415,21 @@ class MessageController extends Controller
             if ($conversation && $conversation->parent_id) {
                 $parent = ParentUser::find($conversation->parent_id);
                 if ($parent && !empty($parent->fcm_token)) {
-                    $this->notificationService->sendPushOnly(
+                    // Comptabiliser les messages non lus de cette conversation pour le badge
+                    $unreadMsgCount = \Illuminate\Support\Facades\DB::table('messages')
+                        ->where('conversation_id', $conversation->id)
+                        ->where('sender_type', '!=', 'parent')
+                        ->where('is_read', false)
+                        ->count();
+                    $this->notificationService->sendToToken(
                         $parent->fcm_token,
                         $title,
                         $body,
                         [
                             'conversation_id' => (string) $conversation->id,
                             'type' => 'teacher_message'
-                        ]
+                        ],
+                        max(1, $unreadMsgCount)
                     );
                 }
             }
