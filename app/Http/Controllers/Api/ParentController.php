@@ -114,7 +114,7 @@ class ParentController extends Controller
                         ->first();
 
                     $photoUrl = $eleve->photo
-                        ? rtrim(env('APP_URL'), '/') . '/storage/' . $eleve->photo
+                        ? \Illuminate\Support\Facades\Storage::url($eleve->photo)
                         : null;
 
                     $notifCount = \App\Models\Notification::where('user_type', 'parent')

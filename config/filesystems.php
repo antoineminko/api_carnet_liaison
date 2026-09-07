@@ -41,7 +41,11 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
+            // URL forcée vers la production : APP_URL peut valoir 'http://localhost'
+            // sur certains environnements Alwaysdata, ce qui casse les URLs des photos.
+            'url' => env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison') === 'http://localhost'
+                ? 'https://sirh.alwaysdata.net/api_carnet_liaison/storage'
+                : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison').'/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

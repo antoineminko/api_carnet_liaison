@@ -18,7 +18,7 @@ class Eleve extends Model
     public function getPhotoUrlAttribute(): ?string
     {
         if ($this->photo) {
-            return rtrim(env('APP_URL'), '/') . '/storage/' . $this->photo;
+            return \Illuminate\Support\Facades\Storage::url($this->photo);
         }
         return null;
     }
