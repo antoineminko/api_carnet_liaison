@@ -12,7 +12,10 @@ class Attendance extends Model
     protected $fillable = [
         'eleve_id',
         'classe_id',
+        'enseignant_id',
         'status',
         'date',
+        'matiere',
+        'heure_arrivee',
     ];
 }

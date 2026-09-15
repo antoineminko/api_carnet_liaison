@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\AdminMessageController;
+use App\Http\Controllers\Api\AdminDashboardAttendanceController;
 
 // Auth — routes publiques (pas de middleware school) + rate limiting anti-bruteforce
 Route::middleware('throttle:5,1')->group(function () {
@@ -206,6 +207,10 @@ Route::middleware(['school'])->group(function () {
     });
     Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
     Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
+
+    // Dashboard Admin — Présences
+    Route::get('/admin/dashboard/attendances/today', [AdminDashboardAttendanceController::class, 'today']);
+    Route::get('/admin/dashboard/attendances/export', [AdminDashboardAttendanceController::class, 'export']);
 });
 
 Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);
