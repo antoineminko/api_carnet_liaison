@@ -208,9 +208,9 @@ Route::middleware(['school'])->group(function () {
     Route::get('/admin/conversations/monitoring', [AdminMessageController::class, 'getCommunications']);
     Route::get('/admin/conversations/monitoring/{id}', [AdminMessageController::class, 'getMonitoringMessages']);
 
-    // Dashboard Admin — Présences
-    Route::get('/admin/dashboard/attendances/today', [AdminDashboardAttendanceController::class, 'today']);
-    Route::get('/admin/dashboard/attendances/export', [AdminDashboardAttendanceController::class, 'export']);
+    // Admin — Présences par classe (onglet Tableau de bord / Suivi des classes)
+    Route::get('/admin/classes/{classe_id}/attendances', [AdminDashboardAttendanceController::class, 'byClasse']);
+    Route::get('/admin/attendances/{attendance_id}/export', [AdminDashboardAttendanceController::class, 'exportSession']);
 });
 
 Route::get('/admin/informations/{eleve_id}', [AdminMessageController::class, 'getAdminInformations']);

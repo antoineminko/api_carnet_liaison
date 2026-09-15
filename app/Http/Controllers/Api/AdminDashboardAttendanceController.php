@@ -5,51 +5,166 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Historique des appels de présence par classe (admin) + export CSV.
+ */
 class AdminDashboardAttendanceController extends Controller
 {
     /**
-     * Liste des appels du jour (ou d'une date) pour l'établissement.
+     * Historique des sessions d'appel pour une classe.
+     * GET /api/admin/classes/{classe_id}/attendances
      */
-    public function today(Request $request)
+    public function byClasse(Request $request, $classeId)
     {
         $ecole = $request->attributes->get('school');
-        $date = $request->input('date', now()->toDateString());
 
-        $rows = $this->buildQuery($ecole->id, $date)->get();
+        $classe = DB::table('classes')
+            ->where('id', $classeId)
+            ->where('ecole_id', $ecole->id)
+            ->first();
 
-        $mapped = $rows->map(fn ($r) => $this->mapRow($r));
+        if (!$classe) {
+            return response()->json(['success' => false, 'error' => 'Classe introuvable'], 404);
+        }
 
-        $summary = [
-            'present' => $mapped->where('status', 'present')->count(),
-            'absent'  => $mapped->where('status', 'absent')->count(),
-            'late'    => $mapped->where('status', 'late')->count(),
-            'total'   => $mapped->count(),
-        ];
+        $hasEnseignant = Schema::hasColumn('attendances', 'enseignant_id');
+
+        $query = DB::table('attendances')
+            ->where('attendances.classe_id', $classeId);
+
+        if ($hasEnseignant) {
+            $sessions = $query
+                ->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id')
+                ->select(
+                    DB::raw('MIN(attendances.id) as id'),
+                    'attendances.date',
+                    'attendances.matiere',
+                    'attendances.enseignant_id',
+                    DB::raw('MIN(attendances.created_at) as taken_at'),
+                    DB::raw('COUNT(*) as eleves_count'),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as present_count"),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_count"),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'late' THEN 1 ELSE 0 END) as late_count"),
+                    'enseignants.nom as enseignant_nom',
+                    'enseignants.prenom as enseignant_prenom'
+                )
+                ->groupBy(
+                    'attendances.date',
+                    'attendances.matiere',
+                    'attendances.enseignant_id',
+                    'enseignants.nom',
+                    'enseignants.prenom'
+                )
+                ->orderByDesc('taken_at')
+                ->get();
+        } else {
+            $sessions = $query
+                ->select(
+                    DB::raw('MIN(attendances.id) as id'),
+                    'attendances.date',
+                    'attendances.matiere',
+                    DB::raw('MIN(attendances.created_at) as taken_at'),
+                    DB::raw('COUNT(*) as eleves_count'),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as present_count"),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent_count"),
+                    DB::raw("SUM(CASE WHEN attendances.status = 'late' THEN 1 ELSE 0 END) as late_count")
+                )
+                ->groupBy('attendances.date', 'attendances.matiere')
+                ->orderByDesc('taken_at')
+                ->get();
+        }
+
+        $mapped = $sessions->map(function ($s) use ($hasEnseignant, $classe) {
+            $prof = $hasEnseignant
+                ? (trim(($s->enseignant_prenom ?? '') . ' ' . ($s->enseignant_nom ?? '')) ?: null)
+                : null;
+
+            return [
+                'id'              => (int) $s->id,
+                'classe_id'       => (int) $classe->id,
+                'classe_nom'      => $classe->nom,
+                'date'            => $s->date,
+                'matiere'         => $s->matiere,
+                'enseignant_id'   => $hasEnseignant ? $s->enseignant_id : null,
+                'enseignant_nom'  => $prof,
+                'taken_at'        => $s->taken_at,
+                'eleves_count'    => (int) $s->eleves_count,
+                'present_count'   => (int) $s->present_count,
+                'absent_count'    => (int) $s->absent_count,
+                'late_count'      => (int) $s->late_count,
+                'message'         => $this->sessionMessage($prof, $s->matiere, $s->taken_at, $s->date),
+            ];
+        });
 
         return response()->json([
             'success'    => true,
-            'date'       => $date,
-            'summary'    => $summary,
+            'classe_id'  => (int) $classeId,
             'attendances'=> $mapped->values(),
         ]);
     }
 
     /**
-     * Export CSV compatible Excel (UTF-8 BOM).
+     * Export CSV d'une session d'appel (via un id de présence représentatif).
+     * GET /api/admin/attendances/{attendance_id}/export
      */
-    public function export(Request $request): StreamedResponse
+    public function exportSession(Request $request, $attendanceId): StreamedResponse|\Illuminate\Http\JsonResponse
     {
         $ecole = $request->attributes->get('school');
-        $date = $request->input('date', now()->toDateString());
+        $hasEnseignant = Schema::hasColumn('attendances', 'enseignant_id');
 
-        $rows = $this->buildQuery($ecole->id, $date)->get();
-        $filename = "presences_{$date}.csv";
+        $pivot = DB::table('attendances')
+            ->join('classes', 'attendances.classe_id', '=', 'classes.id')
+            ->where('attendances.id', $attendanceId)
+            ->where('classes.ecole_id', $ecole->id)
+            ->select('attendances.*', 'classes.nom as classe_nom')
+            ->first();
 
-        return response()->streamDownload(function () use ($rows) {
+        if (!$pivot) {
+            return response()->json(['success' => false, 'error' => 'Appel introuvable'], 404);
+        }
+
+        $q = DB::table('attendances')
+            ->join('eleves', 'attendances.eleve_id', '=', 'eleves.id')
+            ->where('attendances.classe_id', $pivot->classe_id)
+            ->where('attendances.date', $pivot->date);
+
+        if ($pivot->matiere === null) {
+            $q->whereNull('attendances.matiere');
+        } else {
+            $q->where('attendances.matiere', $pivot->matiere);
+        }
+
+        if ($hasEnseignant) {
+            if ($pivot->enseignant_id === null) {
+                $q->whereNull('attendances.enseignant_id');
+            } else {
+                $q->where('attendances.enseignant_id', $pivot->enseignant_id);
+            }
+            $q->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id');
+        }
+
+        $rows = $q->orderBy('eleves.nom')
+            ->orderBy('eleves.prenom')
+            ->select(
+                'attendances.status',
+                'attendances.date',
+                'attendances.matiere',
+                'eleves.nom as eleve_nom',
+                'eleves.prenom as eleve_prenom',
+                $hasEnseignant
+                    ? DB::raw("TRIM(CONCAT(COALESCE(enseignants.prenom,''),' ',COALESCE(enseignants.nom,''))) as enseignant_nom")
+                    : DB::raw("NULL as enseignant_nom")
+            )
+            ->get();
+
+        $safeDate = preg_replace('/[^0-9\-]/', '', (string) $pivot->date) ?: 'export';
+        $filename = "presences_classe_{$pivot->classe_id}_{$safeDate}.csv";
+
+        return response()->streamDownload(function () use ($rows, $pivot) {
             $handle = fopen('php://output', 'w');
-            // BOM UTF-8 pour Excel
             fwrite($handle, "\xEF\xBB\xBF");
             fputcsv($handle, [
                 'Nom élève',
@@ -65,9 +180,9 @@ class AdminDashboardAttendanceController extends Controller
                 fputcsv($handle, [
                     $r->eleve_nom,
                     $r->eleve_prenom,
-                    $r->classe_nom,
+                    $pivot->classe_nom,
                     $this->statusLabel($r->status),
-                    trim(($r->enseignant_prenom ?? '') . ' ' . ($r->enseignant_nom ?? '')) ?: '—',
+                    trim((string) ($r->enseignant_nom ?? '')) ?: '—',
                     $r->matiere ?: '—',
                     $r->date,
                 ], ';');
@@ -79,51 +194,24 @@ class AdminDashboardAttendanceController extends Controller
         ]);
     }
 
-    protected function buildQuery(int $ecoleId, string $date)
+    protected function sessionMessage(?string $prof, ?string $matiere, $takenAt, $date): string
     {
-        return DB::table('attendances')
-            ->join('eleves', 'attendances.eleve_id', '=', 'eleves.id')
-            ->join('classes', 'attendances.classe_id', '=', 'classes.id')
-            ->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id')
-            ->where('classes.ecole_id', $ecoleId)
-            ->where('attendances.date', $date)
-            ->orderBy('classes.nom')
-            ->orderBy('eleves.nom')
-            ->select(
-                'attendances.id',
-                'attendances.status',
-                'attendances.date',
-                'attendances.matiere',
-                'attendances.enseignant_id',
-                'attendances.created_at',
-                'eleves.id as eleve_id',
-                'eleves.nom as eleve_nom',
-                'eleves.prenom as eleve_prenom',
-                'classes.id as classe_id',
-                'classes.nom as classe_nom',
-                'enseignants.nom as enseignant_nom',
-                'enseignants.prenom as enseignant_prenom'
-            );
-    }
+        $profLabel = $prof ?: 'un professeur';
+        $matiereLabel = $matiere ?: 'Non précisée';
 
-    protected function mapRow($r): array
-    {
-        return [
-            'id'              => $r->id,
-            'eleve_id'        => $r->eleve_id,
-            'eleve_nom'       => $r->eleve_nom,
-            'eleve_prenom'    => $r->eleve_prenom,
-            'eleve_full_name' => trim($r->eleve_prenom . ' ' . $r->eleve_nom),
-            'classe_id'       => $r->classe_id,
-            'classe_nom'      => $r->classe_nom,
-            'status'          => $r->status,
-            'status_label'    => $this->statusLabel($r->status),
-            'matiere'         => $r->matiere,
-            'enseignant_id'   => $r->enseignant_id,
-            'enseignant_nom'  => trim(($r->enseignant_prenom ?? '') . ' ' . ($r->enseignant_nom ?? '')) ?: null,
-            'date'            => $r->date,
-            'created_at'      => $r->created_at,
-        ];
+        $heure = '—';
+        $dateLabel = $date;
+        if ($takenAt) {
+            try {
+                $dt = \Carbon\Carbon::parse($takenAt);
+                $heure = $dt->format('H:i');
+                $dateLabel = $dt->locale('fr')->isoFormat('D MMMM YYYY');
+            } catch (\Throwable $e) {
+                // garde les valeurs brutes
+            }
+        }
+
+        return "Nouvelle fiche de présence faite par le professeur {$profLabel}, matière {$matiereLabel}, à {$heure} le {$dateLabel}.";
     }
 
     protected function statusLabel(?string $status): string
