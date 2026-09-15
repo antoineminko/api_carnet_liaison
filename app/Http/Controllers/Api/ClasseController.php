@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Classe;
+use App\Support\OptionalPaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -37,10 +38,15 @@ class ClasseController extends Controller
     {
         try {
             $ecole = $request->attributes->get('school');
-            $classes = Classe::with(['ecole', 'profPrincipal', 'enseignants'])
+            $query = Classe::with(['ecole', 'profPrincipal', 'enseignants'])
                 ->where('ecole_id', $ecole->id)
-                ->get();
-            return response()->json($classes->map(fn ($c) => $this->formatClasse($c))->values());
+                ->orderBy('nom');
+
+            return OptionalPaginator::respond(
+                $request,
+                $query,
+                map: fn ($c) => $this->formatClasse($c)
+            );
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

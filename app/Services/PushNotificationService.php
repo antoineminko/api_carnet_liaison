@@ -9,6 +9,7 @@ use Kreait\Firebase\Exception\Messaging\NotFound;
 use Kreait\Firebase\Exception\MessagingException;
 use App\Models\ParentUser;
 use App\Models\Enseignant;
+use App\Jobs\SendPushNotificationJob;
 
 class PushNotificationService
 {
@@ -20,7 +21,7 @@ class PushNotificationService
         $this->messaging = $messaging;
     }
 
-    public function sendToToken($token, $title, $body, $data = [], $badgeCount = 1)
+    public function sendToToken($token, $title, $body, $data = [], $badgeCount = 1, bool $queued = false)
     {
         if (empty($token)) {
             \Log::warning('[Push] sendToToken: token vide, envoi annulé. Title=' . $title);
@@ -34,6 +35,11 @@ class PushNotificationService
             return true;
         }
         self::$sentPushHashes[$hash] = true;
+
+        if ($queued) {
+            SendPushNotificationJob::dispatch($token, $title, $body, $data, $badgeCount);
+            return true;
+        }
 
         try {
             $notification = Notification::create($title, $body);
@@ -98,7 +104,7 @@ class PushNotificationService
     }
 
     /* Emission du Push FCM et persistance de la notification dans l'historique utilisateur */
-    public function sendAndSave($userType, $userId, $token, $title, $body, $data = [])
+    public function sendAndSave($userType, $userId, $token, $title, $body, $data = [], bool $queued = false)
     {
         $notification = \App\Models\Notification::create([
             'user_type' => $userType,
@@ -131,13 +137,13 @@ class PushNotificationService
 
         $badgeCount = $unreadCount + $adminInfoCount;
 
-        return $this->sendToToken($token, $title, $body, $data, $badgeCount);
+        return $this->sendToToken($token, $title, $body, $data, $badgeCount, $queued);
     }
 
     /* Emission d'un Push FCM éphémère (sans persistance en base de données) */
-    public function sendPushOnly($token, $title, $body, $data = [])
+    public function sendPushOnly($token, $title, $body, $data = [], bool $queued = false)
     {
-        return $this->sendToToken($token, $title, $body, $data);
+        return $this->sendToToken($token, $title, $body, $data, 1, $queued);
     }
 
     protected function removeInvalidToken($token)
@@ -150,4 +156,3 @@ class PushNotificationService
         }
     }
 }
-

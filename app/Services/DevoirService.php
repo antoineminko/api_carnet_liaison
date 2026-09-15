@@ -106,8 +106,10 @@ class DevoirService
         }
         $body = "{$devoir->titre}{$dateText}";
 
+        $parentsData = ParentUser::whereIn('id', $parentsGrouped->keys()->all())->get()->keyBy('id');
+
         foreach ($parentsGrouped as $parentId => $children) {
-            $parent = ParentUser::find($parentId);
+            $parent = $parentsData->get($parentId);
             if (!$parent) continue;
 
             /* Persistance de la notification unitaire rattachée spécifiquement à chaque profil élève */

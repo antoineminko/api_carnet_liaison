@@ -25,42 +25,73 @@ class SendPushNotificationJob implements ShouldQueue
     public $title;
     public $body;
     public $data;
-    
-    
+    public $badgeCount;
+
     public $tries = 3;
-    
-   
-    public function backoff()
+
+    public function backoff(): array
     {
         return [10, 30, 60];
     }
 
-    public function __construct($token, $title, $body, $data = [])
+    public function __construct($token, $title, $body, $data = [], $badgeCount = 1)
     {
         $this->token = $token;
         $this->title = $title;
         $this->body = $body;
         $this->data = $data;
+        $this->badgeCount = $badgeCount;
     }
 
-    public function handle(Messaging $messaging)
+    public function handle(Messaging $messaging): void
     {
         if (empty($this->token)) {
             Log::warning('[SendPushNotificationJob] Token vide, annulation du job.');
             return;
         }
 
-
         try {
             $notification = Notification::create($this->title, $this->body);
-            $stringifiedData = array_map('strval', $this->data);
+
+            $stringifiedData = [];
+            foreach ($this->data as $key => $value) {
+                if (is_array($value) || is_object($value)) {
+                    $stringifiedData[$key] = json_encode($value);
+                } elseif (is_bool($value)) {
+                    $stringifiedData[$key] = $value ? 'true' : 'false';
+                } else {
+                    $stringifiedData[$key] = (string) $value;
+                }
+            }
+
+            $apnsConfig = \Kreait\Firebase\Messaging\ApnsConfig::fromArray([
+                'headers' => [
+                    'apns-priority' => '10',
+                ],
+                'payload' => [
+                    'aps' => [
+                        'badge' => (int) $this->badgeCount,
+                        'sound' => 'default',
+                        'content-available' => 1,
+                    ],
+                ],
+            ]);
+
+            $androidConfig = \Kreait\Firebase\Messaging\AndroidConfig::fromArray([
+                'priority' => 'high',
+                'notification' => [
+                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                    'sound' => 'default',
+                ],
+            ]);
 
             $message = CloudMessage::withTarget('token', $this->token)
                 ->withNotification($notification)
-                ->withData($stringifiedData);
+                ->withData($stringifiedData)
+                ->withApnsConfig($apnsConfig)
+                ->withAndroidConfig($androidConfig);
 
             $messaging->send($message);
-
         } catch (NotFound $e) {
             Log::error('[SendPushNotificationJob] Token NotFound: ' . $e->getMessage() . ' | Suppression du token: ' . substr($this->token, 0, 20) . '...');
             $this->removeInvalidToken($this->token);
@@ -74,15 +105,15 @@ class SendPushNotificationJob implements ShouldQueue
                 $this->removeInvalidToken($this->token);
             } else {
                 Log::error('[SendPushNotificationJob] Erreur FCM réseau/serveur temporaire: ' . $e->getMessage());
-                throw $e; 
+                throw $e;
             }
         } catch (\Exception $e) {
             Log::error('[SendPushNotificationJob] Erreur générale (réseau/VPN?): ' . $e->getMessage());
-            throw $e; 
+            throw $e;
         }
     }
 
-    protected function removeInvalidToken($token)
+    protected function removeInvalidToken($token): void
     {
         try {
             ParentUser::where('fcm_token', $token)->update(['fcm_token' => null]);

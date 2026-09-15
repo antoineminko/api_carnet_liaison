@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\ParentUser;
+use App\Support\OptionalPaginator;
 
 class NotificationController extends Controller
 {
@@ -56,7 +57,7 @@ class NotificationController extends Controller
         ]);
     }
 
-    public function index($role, $user_id)
+    public function index(Request $request, $role, $user_id)
     {
         if (!in_array($role, ['parent', 'enseignant', 'admin'])) {
             return response()->json(['success' => false, 'error' => 'Rôle invalide'], 400);
@@ -87,7 +88,7 @@ class NotificationController extends Controller
                     })->pluck('id')->toArray();
             }
         }
-        $notifications = \App\Models\Notification::where('user_type', $role)
+        $query = \App\Models\Notification::where('user_type', $role)
             ->whereIn('user_id', $userIds)
             ->whereNotIn('type', [
                 'incoming_call', 'call_missed', 'call_rejected',
@@ -95,14 +96,15 @@ class NotificationController extends Controller
                 'appointment_postponed', 'appointment_cancelled', 'appointment_update'
             ])
             ->where('created_at', '>=', now()->subDays(7))
-            ->orderBy('created_at', 'desc')
-            ->limit(50)
-            ->get();
+            ->orderBy('created_at', 'desc');
 
-        return response()->json([
-            'success' => true,
-            'notifications' => $notifications
-        ]);
+        return OptionalPaginator::respond(
+            $request,
+            $query,
+            wrapKey: 'notifications',
+            withSuccess: true,
+            legacyLimit: 50
+        );
     }
 
     public function markAsRead($id)

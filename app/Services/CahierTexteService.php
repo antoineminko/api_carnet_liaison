@@ -62,8 +62,10 @@ class CahierTexteService
         $title = "Cahier de textes - {$cahierTexte->matiere}";
         $body = "Séance du " . date('d/m/Y', strtotime($cahierTexte->date_cours));
 
+        $parentsData = ParentUser::whereIn('id', $parentsGrouped->keys()->all())->get()->keyBy('id');
+
         foreach ($parentsGrouped as $parentId => $children) {
-            $parent = ParentUser::find($parentId);
+            $parent = $parentsData->get($parentId);
             if (!$parent) continue;
 
             /* Persistance unitaire par élève */

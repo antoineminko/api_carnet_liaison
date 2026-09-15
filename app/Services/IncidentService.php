@@ -106,8 +106,10 @@ class IncidentService
             ->get()
             ->groupBy('parent_id');
 
+        $parentsData = ParentUser::whereIn('id', $parentsRelations->keys()->all())->get()->keyBy('id');
+
         foreach ($parentsRelations as $parentId => $relations) {
-            $parent = ParentUser::find($parentId);
+            $parent = $parentsData->get($parentId);
             if (!$parent) continue;
 
             $childrenIncidents = [];

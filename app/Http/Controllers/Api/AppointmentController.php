@@ -9,6 +9,7 @@ use App\Models\ParentUser;
 use App\Models\Enseignant;
 use App\Models\Eleve;
 use App\Services\PushNotificationService;
+use App\Support\OptionalPaginator;
 use Illuminate\Support\Str;
 
 class AppointmentController extends Controller
@@ -382,10 +383,14 @@ class AppointmentController extends Controller
             $query->whereIn('statut', $request->status_in);
         }
 
-        return response()->json([
-            'success' => true,
-            'appointments' => $query->orderBy('date_heure', 'desc')->get()
-        ]);
+        $query->orderBy('date_heure', 'desc');
+
+        return OptionalPaginator::respond(
+            $request,
+            $query,
+            wrapKey: 'appointments',
+            withSuccess: true
+        );
     }
 
     /**

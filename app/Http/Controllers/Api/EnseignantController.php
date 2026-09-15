@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Support\OptionalPaginator;
 
 class EnseignantController extends Controller
 {
@@ -13,10 +14,11 @@ class EnseignantController extends Controller
     {
         try {
             $ecole = $request->attributes->get('school');
-            $enseignants = DB::table('enseignants')
+            $query = DB::table('enseignants')
                 ->where('ecole_id', $ecole->id)
-                ->get();
-            return response()->json($enseignants);
+                ->orderBy('nom');
+
+            return OptionalPaginator::respond($request, $query);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

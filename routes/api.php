@@ -22,10 +22,12 @@ use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\AdminMessageController;
 
-// Auth — routes publiques (pas de middleware school)
-Route::post('/login/parent', [AuthController::class, 'loginParent']);
-Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
-Route::post('/login/admin', [AuthController::class, 'loginAdmin']); // pas de school header requis car le mail est unique
+// Auth — routes publiques (pas de middleware school) + rate limiting anti-bruteforce
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/login/parent', [AuthController::class, 'loginParent']);
+    Route::post('/login/teacher', [AuthController::class, 'loginTeacher']);
+    Route::post('/login/admin', [AuthController::class, 'loginAdmin']);
+});
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 // Liaison — routes protégées par Sanctum (utilisées par app mobile parent)
@@ -38,7 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('/ecoles', [EcoleController::class, 'index']);
 Route::get('/ecoles/search', [EcoleController::class, 'search']);
 Route::get('/ecoles/{code}/profile', [EcoleController::class, 'publicProfile']);
-Route::post('/ecoles', [EcoleController::class, 'store']);
+Route::post('/ecoles', [EcoleController::class, 'store'])->middleware('throttle:3,1');
 Route::put('/ecoles/{id}', [EcoleController::class, 'update']);
 Route::delete('/ecoles/{id}', [EcoleController::class, 'destroy']);
 

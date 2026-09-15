@@ -8,11 +8,11 @@ use Illuminate\Http\Request;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\ParentUser;
+use App\Jobs\SendEmailJob;
 use App\Services\PushNotificationService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
 
 class AdminMessageController extends Controller
 {
@@ -50,10 +50,17 @@ class AdminMessageController extends Controller
 
         $content = $request->content;
         $fichierUrl = null;
+        $attachmentPath = null;
+        $attachmentName = null;
+        $attachmentMime = null;
 
         if ($request->hasFile('fichier')) {
-            $path = $request->file('fichier')->store('communications', 'public');
+            $file = $request->file('fichier');
+            $path = $file->store('communications', 'public');
             $fichierUrl = (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $path;
+            $attachmentPath = Storage::disk('public')->path($path);
+            $attachmentName = $file->getClientOriginalName();
+            $attachmentMime = $file->getClientMimeType();
         }
 
         /* Enregistrement de la diffusion globale de l'information dans la base de données */
@@ -119,7 +126,7 @@ class AdminMessageController extends Controller
                     'is_read'         => false,
                 ]);
 
-                /* Real-time sync: Send push notification to the teacher */
+                /* Push asynchrone vers l'enseignant (queue) */
                 $enseignantTarget = \Illuminate\Support\Facades\DB::table('enseignants')->where('id', $ensId)->first();
                 if ($enseignantTarget && !empty($enseignantTarget->fcm_token)) {
                     $title = "Nouveau message de l'Administration";
@@ -132,7 +139,8 @@ class AdminMessageController extends Controller
                         [
                             'conversation_id' => (string) $conversation->id,
                             'type' => 'admin_message'
-                        ]
+                        ],
+                        true
                     );
                 }
                 $sentCount++;
@@ -213,12 +221,88 @@ class AdminMessageController extends Controller
         $allParentIds = $elevesParents->flatten()->pluck('parent_id')->unique()->toArray();
         $parentsData = ParentUser::whereIn('id', $allParentIds)->get()->keyBy('id');
 
-        $now = now();
+        /* Chat textuel admin → parent : Conversation + Message (pas AdminInformation) */
+        $isTextualChat = ($request->type === 'textual');
 
+        if ($isTextualChat) {
+            foreach ($allParentIds as $parentId) {
+                $parent = $parentsData->get($parentId);
+                if (!$parent) {
+                    continue;
+                }
+
+                $conversation = Conversation::firstOrCreate(
+                    [
+                        'ecole_id'      => $ecoleId,
+                        'enseignant_id' => null,
+                        'parent_id'     => $parentId,
+                    ],
+                    ['status' => 'accepted']
+                );
+
+                if ($conversation->status !== 'accepted') {
+                    $conversation->update(['status' => 'accepted']);
+                }
+
+                Message::create([
+                    'conversation_id' => $conversation->id,
+                    'sender_type'     => 'admin',
+                    'sender_id'       => $ecoleId,
+                    'content'         => $content,
+                    'fichier_url'     => $fichierUrl,
+                    'is_read'         => false,
+                ]);
+
+                $title = $request->filled('titre')
+                    ? $request->titre
+                    : "Nouveau message de l'Administration";
+                $body = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
+
+                $notificationData = [
+                    'type'            => 'message',
+                    'conversation_id' => (string) $conversation->id,
+                ];
+
+                if ($fichierUrl) {
+                    $notificationData['fichier_url'] = $fichierUrl;
+                }
+
+                $this->notificationService->sendAndSave(
+                    'parent',
+                    $parentId,
+                    $parent->fcm_token,
+                    $title,
+                    $body,
+                    $notificationData,
+                    true
+                );
+
+                if (!empty($parent->email)) {
+                    $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
+                    SendEmailJob::dispatch(
+                        $parent->email,
+                        $title,
+                        $emailContent,
+                        $attachmentPath,
+                        $attachmentName,
+                        $attachmentMime
+                    );
+                }
+
+                $sentCount++;
+            }
+
+            return response()->json([
+                'success'    => true,
+                'message'    => 'Message traité et envoyé à ' . $sentCount . ' parent(s) avec succès.',
+                'sent_count' => $sentCount,
+            ], 201);
+        }
+
+        /* Finance / Convocation / autres : conserver AdminInformation */
         foreach ($elevesList as $eleveId) {
-            /* Normalisation du type de message pour garantir sa persistance en tant qu'information administrative */
             $typeInfo = $request->type === 'textual' ? 'info' : $request->type;
-            
+
             $adminInfo = \App\Models\AdminInformation::create([
                 'eleve_id'        => $eleveId,
                 'type'            => $typeInfo,
@@ -244,11 +328,11 @@ class AdminMessageController extends Controller
                     } elseif ($request->type === 'finance') {
                         $title = "Nouvelle information financière";
                     }
-                    
-                    $body  = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
+
+                    $body = substr($content, 0, 100) . (strlen($content) > 100 ? '...' : '');
 
                     $notificationData = [
-                        'type' => 'admin_info',
+                        'type'     => 'admin_info',
                         'eleve_id' => (string) $eleveId,
                     ];
 
@@ -260,33 +344,22 @@ class AdminMessageController extends Controller
                         $notificationData['admin_info_id'] = (string) $adminInfo->id;
                     }
 
-                    // On appelle sendAndSave pour CHAQUE enfant, pour avoir une notification DB par enfant
-                    $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData);
+                    $this->notificationService->sendAndSave('parent', $parentId, $parent->fcm_token, $title, $body, $notificationData, true);
 
-                    // Pour l'envoi d'email, on ne le fait qu'une seule fois par parent
                     if (!in_array($parentId, $parentIdsSet)) {
                         $parentIdsSet[] = $parentId;
-                        
+
                         if (!empty($parent->email)) {
-                            try {
-                                $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
-                                $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
-                                
-                                Mail::raw($emailContent, function($msg) use ($parent, $emailTitle, $request) {
-                                    $msg->to($parent->email)
-                                        ->subject($emailTitle);
-                                    
-                                    if ($request->hasFile('fichier')) {
-                                        $file = $request->file('fichier');
-                                        $msg->attach($file->getRealPath(), [
-                                            'as' => $file->getClientOriginalName(),
-                                            'mime' => $file->getClientMimeType(),
-                                        ]);
-                                    }
-                                });
-                            } catch (\Exception $e) {
-                                Log::error('Erreur envoi email au parent ' . $parent->id . ': ' . $e->getMessage());
-                            }
+                            $emailTitle = $request->type === 'finance' ? "Nouvelle information financière" : "Nouveau message de l'Administration";
+                            $emailContent = 'Bonjour ' . $parent->prenom . ' ' . $parent->nom . ",\n\n" . $content . "\n\nCordialement,\nL'Administration";
+                            SendEmailJob::dispatch(
+                                $parent->email,
+                                $emailTitle,
+                                $emailContent,
+                                $attachmentPath,
+                                $attachmentName,
+                                $attachmentMime
+                            );
                         }
 
                         $sentCount++;
@@ -526,8 +599,42 @@ class AdminMessageController extends Controller
             'is_read'         => false,
         ]);
 
+        $title = "Nouveau message de l'Administration";
+        $body = substr($request->content, 0, 100) . (strlen($request->content) > 100 ? '...' : '');
+        $notificationData = [
+            'type'            => 'message',
+            'conversation_id' => (string) $conversation->id,
+        ];
 
-        
+        if ($conversation->parent_id) {
+            $parent = ParentUser::find($conversation->parent_id);
+            if ($parent) {
+                $this->notificationService->sendAndSave(
+                    'parent',
+                    $parent->id,
+                    $parent->fcm_token,
+                    $title,
+                    $body,
+                    $notificationData,
+                    true
+                );
+            }
+        } elseif ($conversation->enseignant_id) {
+            $enseignant = DB::table('enseignants')->where('id', $conversation->enseignant_id)->first();
+            if ($enseignant && !empty($enseignant->fcm_token)) {
+                $this->notificationService->sendPushOnly(
+                    $enseignant->fcm_token,
+                    $title,
+                    $body,
+                    [
+                        'conversation_id' => (string) $conversation->id,
+                        'type'            => 'admin_message',
+                    ],
+                    true
+                );
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => $message

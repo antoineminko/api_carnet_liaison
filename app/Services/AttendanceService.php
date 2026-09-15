@@ -94,9 +94,10 @@ class AttendanceService
     {
         /* Agrégation des notifications par parent pour éviter les envois multiples */
         $groupedTargets = $targets->groupBy('parent_id');
+        $parentsData = ParentUser::whereIn('id', $groupedTargets->keys()->all())->get()->keyBy('id');
 
         foreach ($groupedTargets as $parentId => $childrenTargets) {
-            $parent = ParentUser::find($parentId);
+            $parent = $parentsData->get($parentId);
             if (!$parent) continue;
 
             /* Persistance individuelle des notifications */

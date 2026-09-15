@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Eleve;
 use App\Models\ParentUser;
+use App\Support\OptionalPaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -15,29 +16,33 @@ class ParentController extends Controller
     {
         try {
             $ecole = $request->attributes->get('school');
-            $parents = ParentUser::with(['eleves.classe.ecole'])
+            $query = ParentUser::with(['eleves.classe.ecole'])
                 ->where('ecole_id', $ecole->id)
-                ->get();
+                ->orderBy('nom');
 
-            return response()->json($parents->map(function ($parent) {
-                return [
-                    'id'         => $parent->id,
-                    'nom'        => $parent->nom,
-                    'prenom'     => $parent->prenom,
-                    'email'      => $parent->email,
-                    'telephone'  => $parent->telephone,
-                    'ecole_id'   => $parent->ecole_id,
-                    'nb_enfants' => $parent->eleves->count(),
-                    'enfants'    => $parent->eleves->map(fn ($e) => [
-                        'id'         => $e->id,
-                        'nom'        => $e->nom,
-                        'prenom'     => $e->prenom,
-                        'classe_nom' => $e->classe?->nom,
-                        'relation'   => $e->pivot?->relation,
-                        'is_verified'=> $e->pivot?->is_verified,
-                    ])->values(),
-                ];
-            })->values());
+            return OptionalPaginator::respond(
+                $request,
+                $query,
+                map: function ($parent) {
+                    return [
+                        'id'         => $parent->id,
+                        'nom'        => $parent->nom,
+                        'prenom'     => $parent->prenom,
+                        'email'      => $parent->email,
+                        'telephone'  => $parent->telephone,
+                        'ecole_id'   => $parent->ecole_id,
+                        'nb_enfants' => $parent->eleves->count(),
+                        'enfants'    => $parent->eleves->map(fn ($e) => [
+                            'id'         => $e->id,
+                            'nom'        => $e->nom,
+                            'prenom'     => $e->prenom,
+                            'classe_nom' => $e->classe?->nom,
+                            'relation'   => $e->pivot?->relation,
+                            'is_verified'=> $e->pivot?->is_verified,
+                        ])->values(),
+                    ];
+                }
+            );
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -106,48 +111,74 @@ class ParentController extends Controller
 
             $eleves = $parent->eleves()
                 ->with(['classe.ecole', 'classe.profPrincipal'])
-                ->get()
-                ->map(function ($eleve) use ($id, $today) {
-                    $attendance = DB::table('attendances')
-                        ->where('eleve_id', $eleve->id)
-                        ->where('date', $today)
-                        ->first();
+                ->get();
 
-                    $photoUrl = $eleve->photo
-                        ? \Illuminate\Support\Facades\Storage::url($eleve->photo)
-                        : null;
+            $eleveIds = $eleves->pluck('id')->all();
 
-                    $notifCount = \App\Models\Notification::where('user_type', 'parent')
-                        ->where('user_id', $id)
-                        ->where('is_read', 0)
-                        ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.eleve_id')) = ?", [(string)$eleve->id])
-                        ->count();
+            /* Batch attendances du jour (évite N+1) */
+            $attendancesByEleve = collect();
+            if (!empty($eleveIds)) {
+                $attendancesByEleve = DB::table('attendances')
+                    ->whereIn('eleve_id', $eleveIds)
+                    ->where('date', $today)
+                    ->get()
+                    ->keyBy('eleve_id');
+            }
 
-                    // Matière du professeur principal (même logique que l'aperçu enfant)
-                    $matiere = $eleve->classe?->profPrincipal?->matiere ?? null;
+            /* Batch notifications non lues du parent, comptage PHP par eleve_id */
+            $notifCounts = array_fill_keys(array_map('strval', $eleveIds), 0);
+            if (!empty($eleveIds)) {
+                $unreadNotifs = \App\Models\Notification::where('user_type', 'parent')
+                    ->where('user_id', $id)
+                    ->where('is_read', 0)
+                    ->get(['id', 'data']);
 
-                    return [
-                        'id'                => $eleve->id,
-                        'nom'               => $eleve->nom,
-                        'prenom'            => $eleve->prenom,
-                        'matricule'         => $eleve->matricule,
-                        'photo_url'         => $photoUrl,
-                        'classe_id'         => $eleve->classe_id,
-                        'classe_nom'        => $eleve->classe?->nom,
-                        'classe_code'       => $eleve->classe?->code,
-                        'ecole_nom'         => $eleve->classe?->ecole?->nom,
-                        'ecole_code'        => $eleve->classe?->ecole?->code,
-                        'relation'          => $eleve->pivot->relation,
-                        'is_verified'       => $eleve->pivot->is_verified,
-                        'attendance_status' => $attendance?->status,
-                        'arrival_time'      => $attendance?->created_at,
-                        'matiere'           => $matiere,
-                        'notif_count'       => $notifCount,
-                        'code_secret'       => $eleve->code_secret,
-                    ];
-                });
+                foreach ($unreadNotifs as $notif) {
+                    $data = $notif->data;
+                    if (is_string($data)) {
+                        $data = json_decode($data, true) ?: [];
+                    }
+                    if (!is_array($data)) {
+                        continue;
+                    }
+                    $eleveIdKey = isset($data['eleve_id']) ? (string) $data['eleve_id'] : null;
+                    if ($eleveIdKey !== null && array_key_exists($eleveIdKey, $notifCounts)) {
+                        $notifCounts[$eleveIdKey]++;
+                    }
+                }
+            }
 
-            return response()->json($eleves->values());
+            $result = $eleves->map(function ($eleve) use ($attendancesByEleve, $notifCounts) {
+                $attendance = $attendancesByEleve->get($eleve->id);
+
+                $photoUrl = $eleve->photo
+                    ? \Illuminate\Support\Facades\Storage::url($eleve->photo)
+                    : null;
+
+                $matiere = $eleve->classe?->profPrincipal?->matiere ?? null;
+
+                return [
+                    'id'                => $eleve->id,
+                    'nom'               => $eleve->nom,
+                    'prenom'            => $eleve->prenom,
+                    'matricule'         => $eleve->matricule,
+                    'photo_url'         => $photoUrl,
+                    'classe_id'         => $eleve->classe_id,
+                    'classe_nom'        => $eleve->classe?->nom,
+                    'classe_code'       => $eleve->classe?->code,
+                    'ecole_nom'         => $eleve->classe?->ecole?->nom,
+                    'ecole_code'        => $eleve->classe?->ecole?->code,
+                    'relation'          => $eleve->pivot->relation,
+                    'is_verified'       => $eleve->pivot->is_verified,
+                    'attendance_status' => $attendance?->status,
+                    'arrival_time'      => $attendance?->created_at,
+                    'matiere'           => $matiere,
+                    'notif_count'       => $notifCounts[(string) $eleve->id] ?? 0,
+                    'code_secret'       => $eleve->code_secret,
+                ];
+            });
+
+            return response()->json($result->values());
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

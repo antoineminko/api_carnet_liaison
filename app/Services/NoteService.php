@@ -93,9 +93,10 @@ class NoteService
         // 3. Group targets by parent to send 1 push per parent
         $groupedTargets = $targets->groupBy('parent_id');
         $sentCount = 0;
+        $parentsData = ParentUser::whereIn('id', $groupedTargets->keys()->all())->get()->keyBy('id');
 
         foreach ($groupedTargets as $parentId => $childrenTargets) {
-            $parent = ParentUser::find($parentId);
+            $parent = $parentsData->get($parentId);
             if (!$parent) continue;
 
             // Save individual notifications in DB for each child so badges increment per child

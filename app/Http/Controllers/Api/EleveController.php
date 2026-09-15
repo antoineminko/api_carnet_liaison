@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Support\OptionalPaginator;
 
 class EleveController extends Controller
 {
@@ -13,7 +14,7 @@ class EleveController extends Controller
     {
         try {
             $ecole = $request->attributes->get('school');
-            $eleves = DB::table('eleves')
+            $query = DB::table('eleves')
                 ->leftJoin('classes', 'eleves.classe_id', '=', 'classes.id')
                 ->where('classes.ecole_id', $ecole->id)
                 ->select(
@@ -21,14 +22,18 @@ class EleveController extends Controller
                     'classes.nom as classe_nom',
                     DB::raw('(SELECT COUNT(*) FROM eleve_parents WHERE eleve_parents.eleve_id = eleves.id) as nb_parents_lies')
                 )
-                ->get();
+                ->orderBy('eleves.nom');
 
-            $eleves = $eleves->map(function($eleve) {
-                $eleve->photo_url = $eleve->photo ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo : null;
-                return $eleve;
-            });
-
-            return response()->json($eleves);
+            return OptionalPaginator::respond(
+                $request,
+                $query,
+                map: function ($eleve) {
+                    $eleve->photo_url = $eleve->photo
+                        ? (env('APP_URL') == 'http://localhost' ? 'https://sirh.alwaysdata.net/api_carnet_liaison' : env('APP_URL', 'https://sirh.alwaysdata.net/api_carnet_liaison')) . '/storage/' . $eleve->photo
+                        : null;
+                    return $eleve;
+                }
+            );
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
