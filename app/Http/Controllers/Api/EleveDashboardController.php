@@ -24,30 +24,63 @@ class EleveDashboardController extends Controller
         $profPrincipal = $classe?->profPrincipal;
 
         $today = date('Y-m-d');
-        $attendanceRow = DB::table('attendances')
-            ->where('eleve_id', $id)
-            ->where('date', $today)
-            ->first();
+        $hasTeacherColumn = \Illuminate\Support\Facades\Schema::hasColumn('attendances', 'enseignant_id');
+        $attendanceQuery = DB::table('attendances')
+            ->where('attendances.eleve_id', $id)
+            ->where('attendances.date', $today)
+            ->orderByDesc('attendances.created_at');
 
-        /* Récupération de l'état de présence de l'élève pour la journée en cours */
-        $attendance = null;
-        if ($attendanceRow) {
-            $statutFr = match($attendanceRow->status) {
+        if ($hasTeacherColumn) {
+            $attendanceQuery
+                ->leftJoin('enseignants', 'attendances.enseignant_id', '=', 'enseignants.id')
+                ->select(
+                    'attendances.status',
+                    'attendances.date',
+                    'attendances.matiere',
+                    'attendances.created_at',
+                    'attendances.updated_at',
+                    'enseignants.prenom',
+                    'enseignants.nom',
+                    'enseignants.matiere as enseignant_matiere'
+                );
+        }
+
+        $attendanceRows = $attendanceQuery->get();
+        $attendances = $attendanceRows->map(function ($row) use ($profPrincipal, $classe) {
+            $statutFr = match ($row->status) {
                 'absent' => 'Absent',
                 'late'   => 'En retard',
                 default  => 'Présent',
             };
-            $ts = $attendanceRow->updated_at ?? $attendanceRow->created_at ?? null;
-            $attendance = [
-                'statut'        => $statutFr,
-                'date'          => $attendanceRow->date,
-                'heure_arrivee' => $ts ? date('H:i', strtotime($ts)) : null,
-                'matiere'       => !empty($attendanceRow->matiere) ? $attendanceRow->matiere : ($profPrincipal?->matiere ?: ($classe?->enseignants->first()?->matiere ?: 'Cours')),
-                'enseignant_nom'=> $profPrincipal
+            $ts = $row->updated_at ?? $row->created_at ?? null;
+            $prenom = property_exists($row, 'prenom') ? $row->prenom : '';
+            $nom = property_exists($row, 'nom') ? $row->nom : '';
+            $teacherSubject = property_exists($row, 'enseignant_matiere') ? $row->enseignant_matiere : null;
+            $teacherName = trim(($prenom ?? '') . ' ' . ($nom ?? ''));
+            if ($teacherName === '') {
+                $teacherName = $profPrincipal
                     ? trim($profPrincipal->prenom . ' ' . $profPrincipal->nom)
-                    : ($classe?->enseignants->first() ? trim($classe->enseignants->first()->prenom . ' ' . $classe->enseignants->first()->nom) : null),
+                    : ($classe?->enseignants->first()
+                        ? trim($classe->enseignants->first()->prenom . ' ' . $classe->enseignants->first()->nom)
+                        : '');
+            }
+            $matiere = !empty($row->matiere)
+                ? $row->matiere
+                : ($teacherSubject ?: ($profPrincipal?->matiere ?: 'Cours'));
+
+            return [
+                'statut'         => $statutFr,
+                'status'         => $row->status,
+                'date'           => $row->date,
+                'heure'          => $ts ? date('H:i', strtotime($ts)) : null,
+                'heure_arrivee'  => $ts ? date('H:i', strtotime($ts)) : null,
+                'matiere'        => $matiere,
+                'enseignant_nom' => $teacherName,
             ];
-        }
+        })->values();
+
+        /* Le résumé reste le dernier appel de la journée. La liste contient chaque cours. */
+        $attendance = $attendances->last();
 
         /* Extraction de l'équipe pédagogique (optimisée via eager loading pour éviter le N+1) */
         $principalId = $classe?->prof_principal_id;
@@ -222,6 +255,7 @@ class EleveDashboardController extends Controller
                 'ecole_id'   => $classe?->ecole_id,
             ]),
             'attendance'                 => $attendance,
+            'attendances'                => $attendances,
             'teachers'                   => $teachers->unique('id')->values()->all(),
             'grades'                     => [],
             'grades_history'             => [],

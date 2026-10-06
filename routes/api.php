@@ -70,20 +70,6 @@ Route::post('/incidents', [IncidentController::class, 'store']);
 Route::get('/eleves/{eleveId}/incidents', [IncidentController::class, 'getByEleve']);
 Route::put('/incidents/{id}/read', [IncidentController::class, 'markAsRead']);
 
-Route::get('/test-attendance', function (\Illuminate\Http\Request $request) {
-    $req = new \Illuminate\Http\Request();
-    // On teste avec la classe 1 et l'eleve 1. 
-    $req->merge([
-        "classe_id" => 1,
-        "date" => date('Y-m-d'),
-        "attendances" => [
-            ["eleve_id" => 1, "status" => "absent"]
-        ]
-    ]);
-    $controller = app()->make(\App\Http\Controllers\Api\AttendanceController::class);
-    return $controller->submitAttendance($req);
-});
-
 // Devoirs & Cahier de Textes
 Route::post('/devoirs', [DevoirController::class, 'store']);
 Route::post('/cahier-textes', [CahierTexteController::class, 'store']);
@@ -150,6 +136,7 @@ Route::put('/notifications/child/{eleveId}/read-all', [NotificationController::c
 
 // Ping Online Status
 Route::post('/ping', [\App\Http\Controllers\Api\PingController::class, 'ping']);
+Route::post('/users/presence', [\App\Http\Controllers\Api\PingController::class, 'presence']);
 
 // Routes d'Appels (Sécurisées par Sanctum)
 Route::middleware('auth:sanctum')->group(function () {

@@ -92,8 +92,7 @@ class NotificationController extends Controller
             ->whereIn('user_id', $userIds)
             ->whereNotIn('type', [
                 'incoming_call', 'call_missed', 'call_rejected',
-                'appointment_request', 'appointment_accepted', 'appointment_refused',
-                'appointment_postponed', 'appointment_cancelled', 'appointment_update'
+                'teacher_message', 'parent_message', 'message', 'admin_message',
             ])
             ->where('created_at', '>=', now()->subDays(7))
             ->orderBy('created_at', 'desc');

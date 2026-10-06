@@ -188,12 +188,17 @@ class AttendanceService
                 $pushBody = "Les informations de présence de vos enfants sont disponibles.";
 
                 try {
+                    $firstChild = $childrenTargets->first();
                     $this->notificationService->sendPushOnly(
                         $parent->fcm_token,
                         $title,
                         $pushBody,
                         [
-                            'type'       => 'attendance_group_alert',
+                            'type'       => 'attendance_alert',
+                            'eleve_id'   => (string) $firstChild['eleve_id'],
+                            'eleve_nom'  => $firstChild['eleve_nom'],
+                            'child_name' => $firstChild['eleve_nom'],
+                            'status'     => (string) $firstChild['status'],
                             'matiere'    => $matiere,
                         ]
                     );

@@ -203,7 +203,8 @@ class MessageController extends Controller
     public function updateConversationStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:accepted,rejected'
+            'status' => 'required|in:accepted,rejected',
+            'actor_type' => 'nullable|in:parent,enseignant',
         ]);
 
         if ($validator->fails()) {
@@ -219,9 +220,9 @@ class MessageController extends Controller
         $conversation->save();
 
         if ($request->status === 'rejected') {
-            $this->sendConversationStatusNotification($conversation, 'rejected', $request->user());
+            $this->sendConversationStatusNotification($conversation, 'rejected', $request->user(), $request->input('actor_type'));
         } elseif ($request->status === 'accepted') {
-            $this->sendConversationStatusNotification($conversation, 'accepted', $request->user());
+            $this->sendConversationStatusNotification($conversation, 'accepted', $request->user(), $request->input('actor_type'));
         }
 
         return response()->json(['success' => true, 'conversation' => $conversation]);
@@ -230,7 +231,7 @@ class MessageController extends Controller
     /**
      * Envoyer une notification lors du changement de statut d'une conversation
      */
-    private function sendConversationStatusNotification($conversation, $status, $actionUser = null)
+    private function sendConversationStatusNotification($conversation, $status, $actionUser = null, $actorType = null)
     {
         try {
             $parent = ParentUser::find($conversation->parent_id);
@@ -254,7 +255,8 @@ class MessageController extends Controller
                     'sent_at'         => now()->timestamp
                 ];
 
-                $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
+                $isParentAction = $actorType === 'parent'
+                    || ($actorType === null && $actionUser && get_class($actionUser) === 'App\Models\ParentUser');
 
                 /* Routage du refus vers l'enseignant lorsque la famille décline la liaison */
                 if ($isParentAction && !empty($enseignant->fcm_token)) {
@@ -267,7 +269,8 @@ class MessageController extends Controller
 
             } elseif ($status === 'accepted') {
 
-                $isParentAction = $actionUser && get_class($actionUser) === 'App\Models\ParentUser';
+                $isParentAction = $actorType === 'parent'
+                    || ($actorType === null && $actionUser && get_class($actionUser) === 'App\Models\ParentUser');
 
 
                 $titleForTeacher = "✅ Liaison acceptée";

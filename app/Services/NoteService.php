@@ -25,7 +25,10 @@ class NoteService
      */
     public function createNotes(array $data, ?int $enseignantId = null): array
     {
-        $enseignantId = $enseignantId ?? (auth()->id() ?? 1);
+        $enseignantId = $enseignantId
+            ?? (isset($data['enseignant_id']) ? (int) $data['enseignant_id'] : null)
+            ?? auth()->id()
+            ?? 1;
 
         // 1. Create the Devoir (acts as Evaluation metadata)
         $devoir = Devoir::create([
@@ -107,12 +110,12 @@ class NoteService
                     'type' => 'new_grade',
                     'title' => "Nouvelle Note : {$data['matiere']}",
                     'message' => "Une note a été publiée pour " . $childTarget['eleve_nom'] . ".\nÉvaluation: {$data['titre']}",
-                    'data' => json_encode([
+                    'data' => [
                         'type' => 'new_grade',
                         'devoir_id' => (string) $devoir->id,
                         'eleve_id' => (string) $childTarget['eleve_id'],
                         'matiere' => $data['matiere'],
-                    ]),
+                    ],
                     'is_read' => false,
                 ]);
             }

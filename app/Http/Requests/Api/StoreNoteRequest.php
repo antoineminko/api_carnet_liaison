@@ -22,6 +22,7 @@ class StoreNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'enseignant_id' => 'nullable|integer|exists:enseignants,id',
             'classe_id' => 'required|exists:classes,id',
             'titre' => 'required|string|max:255',
             'matiere' => 'required|string|max:255',
