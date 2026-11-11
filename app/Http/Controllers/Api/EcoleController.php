@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ecole;
+use App\Services\SuperAdminEmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -75,7 +76,19 @@ class EcoleController extends Controller
                 : Hash::make('password1234'), // Secure default
         ]);
 
-        return response()->json($ecole, 201);
+        $mailResult = ['sent' => false, 'message' => null];
+        if (!empty($ecole->email_admin)) {
+            $mailResult = SuperAdminEmailService::sendWelcomeEmail([
+                'nom'         => $ecole->nom,
+                'code'        => $ecole->code,
+                'email_admin' => $ecole->email_admin,
+            ]);
+        }
+
+        return response()->json(array_merge($ecole->toArray(), [
+            'email_sent'    => $mailResult['sent'],
+            'email_message' => $mailResult['message'] ?? null,
+        ]), 201);
     }
 
 

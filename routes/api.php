@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LiaisonController;
 use App\Http\Controllers\Api\EcoleController;
+use App\Http\Controllers\Api\SuperAdminEmailController;
 use App\Http\Controllers\Api\ClasseController;
 use App\Http\Controllers\Api\EleveController;
 use App\Http\Controllers\Api\ParentController;
@@ -44,6 +45,14 @@ Route::get('/ecoles/{code}/profile', [EcoleController::class, 'publicProfile']);
 Route::post('/ecoles', [EcoleController::class, 'store'])->middleware('throttle:3,1');
 Route::put('/ecoles/{id}', [EcoleController::class, 'update']);
 Route::delete('/ecoles/{id}', [EcoleController::class, 'destroy']);
+
+// Super-Admin — Configuration du système d'envoi d'email d'inscription
+Route::prefix('superadmin')->group(function () {
+    Route::post('/login', [SuperAdminEmailController::class, 'login']);
+    Route::get('/email-config', [SuperAdminEmailController::class, 'getConfig']);
+    Route::post('/email-config', [SuperAdminEmailController::class, 'saveConfig']);
+    Route::post('/test-email', [SuperAdminEmailController::class, 'sendTestEmail']);
+});
 
 // Classes (with school context)
 Route::middleware(['school'])->group(function () {
