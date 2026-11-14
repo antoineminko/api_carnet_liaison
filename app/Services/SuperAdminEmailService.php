@@ -25,13 +25,13 @@ class SuperAdminEmailService
             'smtp_username'   => env('MAIL_USERNAME', ''),
             'smtp_password'   => env('MAIL_PASSWORD', ''),
             'from_email'      => env('MAIL_FROM_ADDRESS', ''),
-            'from_name'       => env('MAIL_FROM_NAME', 'Carnet de Liaison 2.0 - INITIAL'),
+            'from_name'       => env('MAIL_FROM_NAME', 'Carnet de Liaison'),
             'frontend_url'    => env('FRONTEND_URL', 'https://carnet-liaison-three.vercel.app'),
-            'subject'         => 'Bienvenue — Votre espace école {nom_ecole} est prêt',
-            'greeting'        => 'Bonjour la Direction de {nom_ecole},',
-            'intro_message'   => "Merci d'avoir créé votre compte sur Carnet de Liaison.\nChaque établissement dispose de son propre espace. Votre numéro d'espace est {code_ecole}. Conservez-le : il identifie votre école dans la plateforme multi-espaces.",
-            'cta_label'       => 'Ouvrir mon espace école',
-            'footer_note'     => 'Connexion : email {email_admin} + mot de passe ci-dessus. Le numéro d\'espace {code_ecole} désigne uniquement votre établissement.',
+            'subject'         => 'Accès à votre espace {nom_ecole} — n° {code_ecole}',
+            'greeting'        => 'Bonjour,',
+            'intro_message'   => "Votre établissement {nom_ecole} a été enregistré sur Carnet de Liaison.\nVoici vos informations de connexion. Le numéro d'espace {code_ecole} identifie votre école dans la plateforme.",
+            'cta_label'       => 'Accéder à mon espace',
+            'footer_note'     => 'Utilisez l\'email et le mot de passe indiqués pour vous connecter. Ce message est automatique, ne pas répondre.',
         ];
     }
 
@@ -50,7 +50,21 @@ class SuperAdminEmailService
             if (!is_array($decoded)) {
                 return $defaults;
             }
-            return array_merge($defaults, $decoded);
+            $merged = array_merge($defaults, $decoded);
+
+            // Remplace les anciens textes trop "marketing" (favorisent le spam)
+            $subject = (string) ($merged['subject'] ?? '');
+            if (
+                str_contains($subject, 'Version 2.0')
+                || str_contains($subject, 'Bienvenue sur Carnet')
+                || str_contains($subject, 'félicitations')
+            ) {
+                foreach (['subject', 'greeting', 'intro_message', 'cta_label', 'footer_note', 'from_name'] as $key) {
+                    $merged[$key] = $defaults[$key];
+                }
+            }
+
+            return self::normalizeFromEmail($merged);
         } catch (\Throwable $e) {
             Log::warning('[SuperAdminEmailService] Impossible de lire la configuration email: ' . $e->getMessage());
             return $defaults;
@@ -177,11 +191,15 @@ class SuperAdminEmailService
         ];
 
         $subject = strtr((string) $config['subject'], $replacements);
-        $greeting = htmlspecialchars(strtr((string) $config['greeting'], $replacements), ENT_QUOTES, 'UTF-8');
-        $introRaw = htmlspecialchars(strtr((string) $config['intro_message'], $replacements), ENT_QUOTES, 'UTF-8');
-        $introHtml = nl2br($introRaw);
-        $ctaLabel = htmlspecialchars(strtr((string) $config['cta_label'], $replacements), ENT_QUOTES, 'UTF-8');
-        $footerNote = nl2br(htmlspecialchars(strtr((string) $config['footer_note'], $replacements), ENT_QUOTES, 'UTF-8'));
+        $greetingPlain = strtr((string) $config['greeting'], $replacements);
+        $introPlain = strtr((string) $config['intro_message'], $replacements);
+        $ctaLabelPlain = strtr((string) $config['cta_label'], $replacements);
+        $footerPlain = strtr((string) $config['footer_note'], $replacements);
+
+        $greeting = htmlspecialchars($greetingPlain, ENT_QUOTES, 'UTF-8');
+        $introHtml = nl2br(htmlspecialchars($introPlain, ENT_QUOTES, 'UTF-8'));
+        $ctaLabel = htmlspecialchars($ctaLabelPlain, ENT_QUOTES, 'UTF-8');
+        $footerNote = nl2br(htmlspecialchars($footerPlain, ENT_QUOTES, 'UTF-8'));
 
         $escapedNom = htmlspecialchars($nomEcole, ENT_QUOTES, 'UTF-8');
         $escapedCode = htmlspecialchars($codeEcole, ENT_QUOTES, 'UTF-8');
@@ -190,6 +208,7 @@ class SuperAdminEmailService
         $escapedLien = htmlspecialchars($lienEspace, ENT_QUOTES, 'UTF-8');
         $year = date('Y');
 
+        // HTML transactionnel sobre (moins de signaux spam que le template marketing)
         $html = <<<HTML
 <!DOCTYPE html>
 <html lang="fr">
@@ -198,120 +217,48 @@ class SuperAdminEmailService
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{$subject}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;padding:36px 16px;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
     <tr>
-      <td align="center">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 20px 45px rgba(10,25,47,0.10);border:1px solid #e2e8f0;">
-          
-          <!-- En-tête Institutionnel -->
+      <td style="padding:24px 16px;">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;width:100%;margin:0 auto;border:1px solid #e5e7eb;">
           <tr>
-            <td style="background:linear-gradient(135deg,#0a192f 0%,#112a46 55%,#2596be 100%);padding:40px 36px;text-align:center;">
-              <div style="display:inline-block;background-color:rgba(37,150,190,0.22);border:1px solid rgba(99,188,224,0.45);border-radius:999px;padding:6px 16px;font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#7dd3fc;margin-bottom:16px;">
-                ★ Solution Officielle • Version 2.0
-              </div>
-              <h1 style="margin:0;font-size:28px;line-height:1.25;font-weight:800;color:#ffffff;letter-spacing:-0.4px;">
-                Carnet de <span style="color:#63bce0;">Liaison</span>
-              </h1>
-              <p style="margin:10px 0 0 0;font-size:14px;color:#cbd5e1;font-weight:500;">
-                Le lien numérique direct entre l'école et la famille
-              </p>
+            <td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;background:#0a192f;color:#ffffff;font-size:18px;font-weight:700;">
+              Carnet de Liaison
             </td>
           </tr>
-
-          <!-- Corps du message -->
           <tr>
-            <td style="padding:38px 36px 28px 36px;">
-              <h2 style="margin:0 0 16px 0;font-size:20px;font-weight:800;color:#0f172a;">
-                {$greeting}
-              </h2>
-              <p style="margin:0 0 26px 0;font-size:15px;line-height:1.7;color:#475569;">
-                {$introHtml}
-              </p>
+            <td style="padding:24px;">
+              <p style="margin:0 0 12px 0;font-size:15px;line-height:1.5;">{$greeting}</p>
+              <p style="margin:0 0 20px 0;font-size:14px;line-height:1.6;color:#333333;">{$introHtml}</p>
 
-              <!-- Carte Récapitulative de l'Établissement -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc;border:1px solid #cbd5e1;border-left:5px solid #2596be;border-radius:16px;margin-bottom:28px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e5e7eb;margin:0 0 20px 0;">
                 <tr>
-                  <td style="padding:22px 24px;">
-                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;color:#2596be;margin-bottom:8px;">
-                      Accès à votre espace école
-                    </div>
-                    <p style="margin:0 0 14px 0;font-size:12px;line-height:1.55;color:#64748b;">
-                      Carnet de Liaison est une plateforme multi-espaces : chaque école a son numéro d'espace. Le vôtre est <strong style="color:#0f172a;">{$escapedCode}</strong>.
-                    </p>
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;color:#1e293b;">
-                      <tr>
-                        <td style="padding:6px 0;color:#64748b;width:42%;font-weight:600;">Établissement :</td>
-                        <td style="padding:6px 0;font-weight:800;color:#0f172a;">{$escapedNom}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:6px 0;color:#64748b;font-weight:600;">N° d'espace :</td>
-                        <td style="padding:6px 0;">
-                          <span style="font-family:Consolas,Monaco,monospace;font-weight:800;font-size:14px;color:#0a192f;background-color:#e0f2fe;border:1px solid #bae6fd;padding:3px 10px;border-radius:6px;">
-                            {$escapedCode}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Email de connexion :</td>
-                        <td style="padding:6px 0;font-weight:700;color:#0f172a;">{$escapedEmail}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Mot de passe :</td>
-                        <td style="padding:6px 0;">
-                          <span style="font-family:Consolas,Monaco,monospace;font-weight:800;font-size:14px;color:#0a192f;background-color:#fef3c7;border:1px solid #fcd34d;padding:3px 10px;border-radius:6px;">
-                            {$escapedPassword}
-                          </span>
-                        </td>
-                      </tr>
-                    </table>
+                  <td style="padding:14px 16px;font-size:14px;line-height:1.7;">
+                    <strong>Établissement :</strong> {$escapedNom}<br />
+                    <strong>N° d'espace :</strong> {$escapedCode}<br />
+                    <strong>Email :</strong> {$escapedEmail}<br />
+                    <strong>Mot de passe :</strong> {$escapedPassword}
                   </td>
                 </tr>
               </table>
 
-              <!-- Bouton d'action principal (CTA) -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:30px 0;">
-                <tr>
-                  <td align="center">
-                    <a href="{$escapedLien}" target="_blank" style="display:inline-block;background-color:#2596be;color:#ffffff;font-size:16px;font-weight:800;text-decoration:none;padding:16px 36px;border-radius:999px;box-shadow:0 10px 25px rgba(37,150,190,0.35);">
-                      {$ctaLabel} &rarr;
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Lien direct copiable -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f9ff;border:1px dashed #7dd3fc;border-radius:12px;margin-bottom:24px;">
-                <tr>
-                  <td style="padding:14px 18px;text-align:center;">
-                    <div style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">
-                      Lien direct de votre espace école
-                    </div>
-                    <a href="{$escapedLien}" target="_blank" style="font-size:13px;font-family:Consolas,Monaco,monospace;color:#0284c7;word-break:break-all;text-decoration:underline;font-weight:700;">
-                      {$escapedLien}
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;background-color:#fffbeb;border:1px solid #fde68a;padding:12px 16px;border-radius:12px;">
-                💡 {$footerNote}
+              <p style="margin:0 0 8px 0;">
+                <a href="{$escapedLien}" style="display:inline-block;background:#2596be;color:#ffffff;text-decoration:none;padding:12px 20px;font-size:14px;font-weight:700;">
+                  {$ctaLabel}
+                </a>
               </p>
+              <p style="margin:0 0 16px 0;font-size:12px;line-height:1.5;color:#555555;word-break:break-all;">
+                Lien : {$escapedLien}
+              </p>
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#666666;">{$footerNote}</p>
             </td>
           </tr>
-
-          <!-- Pied de page -->
           <tr>
-            <td style="background-color:#0a192f;padding:24px 36px;text-align:center;color:#94a3b8;font-size:12px;">
-              <p style="margin:0 0 6px 0;font-weight:700;color:#ffffff;font-size:13px;">
-                Carnet de Liaison — Version 2.0
-              </p>
-              <p style="margin:0;color:#64748b;">
-                © {$year} Tous droits réservés • Solution éditée par <strong style="color:#e2e8f0;">INITIAL</strong>
-              </p>
+            <td style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;color:#777777;">
+              Carnet de Liaison — INITIAL — {$year}
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -320,9 +267,28 @@ class SuperAdminEmailService
 </html>
 HTML;
 
+        $text = implode("\n", [
+            $greetingPlain,
+            '',
+            $introPlain,
+            '',
+            'Etablissement : ' . $nomEcole,
+            "N d'espace : " . $codeEcole,
+            'Email : ' . $emailAdmin,
+            'Mot de passe : ' . $motDePasse,
+            '',
+            $ctaLabelPlain . ' :',
+            $lienEspace,
+            '',
+            $footerPlain,
+            '',
+            'Carnet de Liaison — INITIAL — ' . $year,
+        ]);
+
         return [
             'subject'     => $subject,
             'html'        => $html,
+            'text'        => $text,
             'lien_espace' => $lienEspace,
         ];
     }
@@ -355,15 +321,34 @@ HTML;
             self::applyRuntimeMailConfig($config);
             $mailContent = self::buildStyledEmail($schoolData, $config);
 
-            Mail::html($mailContent['html'], function ($message) use ($recipient, $mailContent, $config) {
-                $fromEmail = trim((string) ($config['from_email'] ?: $config['smtp_username']));
-                $fromName = trim((string) ($config['from_name'] ?: 'Carnet de Liaison 2.0 - INITIAL'));
+            $fromEmail = trim((string) ($config['from_email'] ?: $config['smtp_username']));
+            $fromName = trim((string) ($config['from_name'] ?: 'Carnet de Liaison'));
 
+            Mail::send([], [], function ($message) use ($recipient, $mailContent, $fromEmail, $fromName) {
                 $message->to($recipient)
-                    ->subject($mailContent['subject']);
+                    ->subject($mailContent['subject'])
+                    ->html($mailContent['html'])
+                    ->text($mailContent['text'] ?? strip_tags($mailContent['html']));
 
                 if ($fromEmail !== '') {
                     $message->from($fromEmail, $fromName);
+                    $message->replyTo($fromEmail, $fromName);
+                    $message->returnPath($fromEmail);
+                }
+
+                // Signaux transactionnels (réduit le filtrage promo/spam)
+                try {
+                    $symfony = method_exists($message, 'getSymfonyMessage')
+                        ? $message->getSymfonyMessage()
+                        : null;
+                    if ($symfony && method_exists($symfony, 'getHeaders')) {
+                        $headers = $symfony->getHeaders();
+                        $headers->addTextHeader('Auto-Submitted', 'auto-generated');
+                        $headers->addTextHeader('X-Auto-Response-Suppress', 'All');
+                        $headers->addTextHeader('X-Entity-Ref-ID', 'carnet-liaison-welcome');
+                    }
+                } catch (\Throwable $headerError) {
+                    // Headers optionnels
                 }
             });
 
