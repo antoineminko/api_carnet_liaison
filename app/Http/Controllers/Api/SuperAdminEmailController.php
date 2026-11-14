@@ -95,6 +95,10 @@ class SuperAdminEmailController extends Controller
             $allowed['smtp_port'] = (int) $allowed['smtp_port'];
         }
 
+        if (!empty($allowed['smtp_username'])) {
+            $allowed['from_email'] = $allowed['smtp_username'];
+        }
+
         $saved = SuperAdminEmailService::saveConfig($allowed);
         $hasPassword = !empty($saved['smtp_password']);
         $saved['has_password'] = $hasPassword;
@@ -142,16 +146,22 @@ class SuperAdminEmailController extends Controller
             'footer_note',
         ]);
 
-        if (!empty($override)) {
-            SuperAdminEmailService::saveConfig($override);
+        // Toujours aligner l'expéditeur sur le compte Gmail SMTP
+        if (!empty($override['smtp_username'])) {
+            $override['from_email'] = $override['smtp_username'];
         }
+
+        // Utiliser la config fusionnée en mémoire pour l'envoi (même si l'écriture disque échoue)
+        $runtimeConfig = !empty($override)
+            ? SuperAdminEmailService::saveConfig($override)
+            : SuperAdminEmailService::getConfig();
 
         $result = SuperAdminEmailService::sendWelcomeEmail([
             'nom'          => $request->input('school_name', 'Collège Saint-Exupéry'),
             'code'         => $request->input('school_code', 'STEX2026'),
             'email_admin'  => $request->input('test_email'),
             'mot_de_passe' => $request->input('school_password', 'MotDePasseDemo'),
-        ]);
+        ], $runtimeConfig);
 
         if ($result['sent']) {
             return response()->json([

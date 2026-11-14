@@ -57,35 +57,70 @@ class SuperAdminEmailService
         }
     }
 
+    public static function isMaskedPassword(?string $password): bool
+    {
+        $password = trim((string) $password);
+        return $password === '' || $password === '••••••••' || preg_match('/^•+$/u', $password) === 1;
+    }
+
+    /** Force l'expéditeur = compte SMTP (Gmail refuse hello@example.com, etc.). */
+    public static function normalizeFromEmail(array $config): array
+    {
+        $username = trim((string) ($config['smtp_username'] ?? ''));
+        $fromEmail = trim((string) ($config['from_email'] ?? ''));
+
+        $invalidFrom = $fromEmail === ''
+            || str_contains($fromEmail, 'example.com')
+            || str_contains($fromEmail, 'noreply@carnetliaison');
+
+        if ($username !== '' && $invalidFrom) {
+            $config['from_email'] = $username;
+        } elseif ($fromEmail === '' && $username !== '') {
+            $config['from_email'] = $username;
+        }
+
+        return $config;
+    }
+
     public static function saveConfig(array $newConfig): array
     {
         $current = self::getConfig();
 
         // Si le mot de passe envoyé est masqué ou vide, on conserve l'ancien mot de passe enregistré
-        if (isset($newConfig['smtp_password']) && ($newConfig['smtp_password'] === '••••••••' || $newConfig['smtp_password'] === '')) {
+        if (isset($newConfig['smtp_password']) && self::isMaskedPassword($newConfig['smtp_password'])) {
             unset($newConfig['smtp_password']);
         }
 
-        $merged = array_merge($current, $newConfig);
+        $merged = self::normalizeFromEmail(array_merge($current, $newConfig));
         $path = self::getConfigPath();
 
         if (!is_dir(dirname($path))) {
             @mkdir(dirname($path), 0755, true);
         }
 
-        file_put_contents($path, json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $written = @file_put_contents(
+            $path,
+            json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+
+        if ($written === false) {
+            Log::error('[SuperAdminEmailService] Impossible d\'écrire ' . $path);
+        }
 
         return $merged;
     }
 
     public static function applyRuntimeMailConfig(array $config): void
     {
+        $config = self::normalizeFromEmail($config);
         $host = trim((string) ($config['smtp_host'] ?? 'smtp.gmail.com'));
         $port = (int) ($config['smtp_port'] ?? 587);
         $encryption = strtolower(trim((string) ($config['smtp_encryption'] ?? 'tls')));
         $username = trim((string) ($config['smtp_username'] ?? ''));
         $password = (string) ($config['smtp_password'] ?? '');
-        $fromEmail = trim((string) ($config['from_email'] ?: $username ?: 'noreply@carnetliaison.com'));
+        // Retirer les espaces du mot de passe d'application Gmail (jjol gclj ... → jjolgclj...)
+        $password = preg_replace('/\s+/', '', $password) ?? $password;
+        $fromEmail = trim((string) ($config['from_email'] ?: $username));
         $fromName = trim((string) ($config['from_name'] ?: 'Carnet de Liaison 2.0 - INITIAL'));
 
         $scheme = null;
@@ -294,7 +329,12 @@ HTML;
 
     public static function sendWelcomeEmail(array $schoolData, ?array $overrideConfig = null): array
     {
-        $config = $overrideConfig ? array_merge(self::getConfig(), $overrideConfig) : self::getConfig();
+        $override = $overrideConfig ?? [];
+        if (isset($override['smtp_password']) && self::isMaskedPassword($override['smtp_password'])) {
+            unset($override['smtp_password']);
+        }
+
+        $config = self::normalizeFromEmail(array_merge(self::getConfig(), $override));
         $recipient = trim((string) ($schoolData['email_admin'] ?? ''));
 
         if ($recipient === '') {
@@ -304,10 +344,10 @@ HTML;
             ];
         }
 
-        if (empty($config['smtp_username']) || empty($config['smtp_password'])) {
+        if (empty($config['smtp_username']) || self::isMaskedPassword($config['smtp_password'] ?? '')) {
             return [
                 'sent'    => false,
-                'message' => 'Boîte email expéditrice non configurée dans l\'espace Super-Admin.',
+                'message' => 'Mot de passe d\'application Gmail manquant. Saisissez-le puis cliquez sur Enregistrer.',
             ];
         }
 
