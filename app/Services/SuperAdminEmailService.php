@@ -27,11 +27,11 @@ class SuperAdminEmailService
             'from_email'      => env('MAIL_FROM_ADDRESS', ''),
             'from_name'       => env('MAIL_FROM_NAME', 'Carnet de Liaison 2.0 - INITIAL'),
             'frontend_url'    => env('FRONTEND_URL', 'https://carnet-liaison-three.vercel.app'),
-            'subject'         => 'Bienvenue sur Carnet de Liaison Version 2.0 — Votre espace {nom_ecole} est prêt',
+            'subject'         => 'Bienvenue — Votre espace école {nom_ecole} est prêt',
             'greeting'        => 'Bonjour la Direction de {nom_ecole},',
-            'intro_message'   => "Merci d'avoir souscrit à notre solution Carnet de Liaison Version 2.0 !\nVotre espace numérique dédié au suivi pédagogique, à la vie scolaire et à la communication directe entre l'école et la famille a été généré avec succès.",
-            'cta_label'       => 'Accéder à mon espace établissement',
-            'footer_note'     => 'Connectez-vous à l\'aide de votre adresse email administrative ({email_admin}) et du mot de passe défini lors de votre inscription.',
+            'intro_message'   => "Merci d'avoir créé votre compte sur Carnet de Liaison.\nChaque établissement dispose de son propre espace. Votre numéro d'espace est {code_ecole}. Conservez-le : il identifie votre école dans la plateforme multi-espaces.",
+            'cta_label'       => 'Ouvrir mon espace école',
+            'footer_note'     => 'Connexion : email {email_admin} + mot de passe ci-dessus. Le numéro d\'espace {code_ecole} désigne uniquement votre établissement.',
         ];
     }
 
@@ -125,6 +125,10 @@ class SuperAdminEmailService
         $nomEcole = (string) ($schoolData['nom'] ?? 'Votre Établissement');
         $codeEcole = strtoupper((string) ($schoolData['code'] ?? 'ECOLE2026'));
         $emailAdmin = (string) ($schoolData['email_admin'] ?? 'direction@ecole.com');
+        $motDePasse = (string) ($schoolData['mot_de_passe'] ?? $schoolData['password_admin'] ?? '');
+        if ($motDePasse === '') {
+            $motDePasse = '(mot de passe défini à l\'inscription)';
+        }
         $frontendUrl = rtrim((string) ($config['frontend_url'] ?: 'https://carnet-liaison-three.vercel.app'), '/');
         $lienEspace = $schoolData['lien_espace'] ?? "{$frontendUrl}/ecoles/{$codeEcole}/login";
 
@@ -132,6 +136,7 @@ class SuperAdminEmailService
             '{nom_ecole}'      => $nomEcole,
             '{code_ecole}'     => $codeEcole,
             '{email_admin}'    => $emailAdmin,
+            '{mot_de_passe}'   => $motDePasse,
             '{lien_espace}'    => $lienEspace,
             '{lien_connexion}' => $lienEspace,
         ];
@@ -146,6 +151,7 @@ class SuperAdminEmailService
         $escapedNom = htmlspecialchars($nomEcole, ENT_QUOTES, 'UTF-8');
         $escapedCode = htmlspecialchars($codeEcole, ENT_QUOTES, 'UTF-8');
         $escapedEmail = htmlspecialchars($emailAdmin, ENT_QUOTES, 'UTF-8');
+        $escapedPassword = htmlspecialchars($motDePasse, ENT_QUOTES, 'UTF-8');
         $escapedLien = htmlspecialchars($lienEspace, ENT_QUOTES, 'UTF-8');
         $year = date('Y');
 
@@ -192,16 +198,19 @@ class SuperAdminEmailService
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc;border:1px solid #cbd5e1;border-left:5px solid #2596be;border-radius:16px;margin-bottom:28px;">
                 <tr>
                   <td style="padding:22px 24px;">
-                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;color:#2596be;margin-bottom:12px;">
-                      Vos paramètres d'accès établissement
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;color:#2596be;margin-bottom:8px;">
+                      Accès à votre espace école
                     </div>
+                    <p style="margin:0 0 14px 0;font-size:12px;line-height:1.55;color:#64748b;">
+                      Carnet de Liaison est une plateforme multi-espaces : chaque école a son numéro d'espace. Le vôtre est <strong style="color:#0f172a;">{$escapedCode}</strong>.
+                    </p>
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;color:#1e293b;">
                       <tr>
                         <td style="padding:6px 0;color:#64748b;width:42%;font-weight:600;">Établissement :</td>
                         <td style="padding:6px 0;font-weight:800;color:#0f172a;">{$escapedNom}</td>
                       </tr>
                       <tr>
-                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Identifiant / Code :</td>
+                        <td style="padding:6px 0;color:#64748b;font-weight:600;">N° d'espace :</td>
                         <td style="padding:6px 0;">
                           <span style="font-family:Consolas,Monaco,monospace;font-weight:800;font-size:14px;color:#0a192f;background-color:#e0f2fe;border:1px solid #bae6fd;padding:3px 10px;border-radius:6px;">
                             {$escapedCode}
@@ -209,8 +218,16 @@ class SuperAdminEmailService
                         </td>
                       </tr>
                       <tr>
-                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Email Administrateur :</td>
+                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Email de connexion :</td>
                         <td style="padding:6px 0;font-weight:700;color:#0f172a;">{$escapedEmail}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;color:#64748b;font-weight:600;">Mot de passe :</td>
+                        <td style="padding:6px 0;">
+                          <span style="font-family:Consolas,Monaco,monospace;font-weight:800;font-size:14px;color:#0a192f;background-color:#fef3c7;border:1px solid #fcd34d;padding:3px 10px;border-radius:6px;">
+                            {$escapedPassword}
+                          </span>
+                        </td>
                       </tr>
                     </table>
                   </td>

@@ -147,9 +147,10 @@ class SuperAdminEmailController extends Controller
         }
 
         $result = SuperAdminEmailService::sendWelcomeEmail([
-            'nom'         => $request->input('school_name', 'Établissement Démo 2.0'),
-            'code'        => $request->input('school_code', 'DEMO2026'),
-            'email_admin' => $request->input('test_email'),
+            'nom'          => $request->input('school_name', 'Collège Saint-Exupéry'),
+            'code'         => $request->input('school_code', 'STEX2026'),
+            'email_admin'  => $request->input('test_email'),
+            'mot_de_passe' => $request->input('school_password', 'MotDePasseDemo'),
         ]);
 
         if ($result['sent']) {

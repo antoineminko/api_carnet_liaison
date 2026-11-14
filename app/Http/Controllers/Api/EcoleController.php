@@ -58,6 +58,11 @@ class EcoleController extends Controller
             'code' => 'required|string|max:10|unique:ecoles,code',
         ]);
 
+        // Mot de passe en clair uniquement pour l'email de bienvenue (stocké hashé en base)
+        $plainPassword = $request->filled('password_admin')
+            ? (string) $request->password_admin
+            : 'password1234';
+
         $ecole = Ecole::create([
             'nom'            => $request->nom,
             'code'           => strtoupper($request->code),
@@ -71,17 +76,16 @@ class EcoleController extends Controller
             'nb_classes'     => $request->input('nb_classes', 0),
             'nb_profs'       => $request->input('nb_profs', 0),
             'nb_eleves'      => $request->input('nb_eleves', 0),
-            'password_admin' => $request->filled('password_admin')
-                ? Hash::make($request->password_admin)
-                : Hash::make('password1234'), // Secure default
+            'password_admin' => Hash::make($plainPassword),
         ]);
 
         $mailResult = ['sent' => false, 'message' => null];
         if (!empty($ecole->email_admin)) {
             $mailResult = SuperAdminEmailService::sendWelcomeEmail([
-                'nom'         => $ecole->nom,
-                'code'        => $ecole->code,
-                'email_admin' => $ecole->email_admin,
+                'nom'           => $ecole->nom,
+                'code'          => $ecole->code,
+                'email_admin'   => $ecole->email_admin,
+                'mot_de_passe'  => $plainPassword,
             ]);
         }
 
